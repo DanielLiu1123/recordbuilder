@@ -39,7 +39,7 @@ class RecordBuilderProcessorTest {
         builder.setString("Test String");
         builder.setLocalDate(LocalDate.now());
         builder.setNullableString("Hello");
-        builder.addAllListString(List.of("A", "B", "C"));
+        builder.setListString(List.of("A", "B", "C"));
         Everything record = builder.build();
 
         assertThat(record).isNotSameAs(EverythingBuilder.from(record).build());

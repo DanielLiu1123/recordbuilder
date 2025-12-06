@@ -27,10 +27,6 @@ final class Constants {
     // Method prefixes
     static final String SET_PREFIX = "set";
     static final String GET_PREFIX = "get";
-    static final String ADD_PREFIX = "add";
-    static final String ADD_ALL_PREFIX = "addAll";
-    static final String PUT_PREFIX = "put";
-    static final String PUT_ALL_PREFIX = "putAll";
     static final String CLEAR_PREFIX = "clear";
     static final String HAS_PREFIX = "has";
 

@@ -7,13 +7,10 @@ import com.palantir.javapoet.FieldSpec;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.MethodSpec;
 import com.palantir.javapoet.ParameterSpec;
-import com.palantir.javapoet.ParameterizedTypeName;
 import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import javax.annotation.processing.AbstractProcessor;
@@ -150,18 +147,10 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // Add static from() method
         builderClassBuilder.addMethod(generateFromMethod(recordClassName, builderClassName, components));
 
-        // Add setter methods, add adder/putter methods for Collection/Map fields
+        // Add setter methods for all fields
         for (int i = 0; i < components.size(); i++) {
             RecordComponentElement component = components.get(i);
-            if (typeAnalyzer.isCollection(component)) {
-                builderClassBuilder.addMethod(generateAddMethod(builderClassName, component, i, components.size()));
-                builderClassBuilder.addMethod(generateAddAllMethod(builderClassName, component, i, components.size()));
-            } else if (typeAnalyzer.isMap(component)) {
-                builderClassBuilder.addMethod(generatePutMethod(builderClassName, component, i, components.size()));
-                builderClassBuilder.addMethod(generatePutAllMethod(builderClassName, component, i, components.size()));
-            } else {
-                builderClassBuilder.addMethod(generateSetterMethod(builderClassName, component, i, components.size()));
-            }
+            builderClassBuilder.addMethod(generateSetterMethod(builderClassName, component, i, components.size()));
         }
 
         // Add hasXxx() methods for all fields
@@ -204,33 +193,18 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         for (RecordComponentElement component : components) {
             String fieldName = component.getSimpleName().toString();
             String getterName = fieldName;
+            String setterName = "set" + capitalize(fieldName);
 
-            if (typeAnalyzer.isCollection(component)) {
-                // For collections, use addAll method
-                String addAllMethodName = "addAll" + capitalize(fieldName);
-                methodBuilder
-                        .beginControlFlow("if (source.$L() != null)", getterName)
-                        .addStatement("builder.$L(source.$L())", addAllMethodName, getterName)
-                        .endControlFlow();
-            } else if (typeAnalyzer.isMap(component)) {
-                // For maps, use putAll method
-                String putAllMethodName = "putAll" + capitalize(fieldName);
-                methodBuilder
-                        .beginControlFlow("if (source.$L() != null)", getterName)
-                        .addStatement("builder.$L(source.$L())", putAllMethodName, getterName)
-                        .endControlFlow();
-            } else {
-                // For regular fields, use setter method
+            // Use setter method for all fields
+            if (typeAnalyzer.isPrimitive(component)) {
                 // If primitive, no null check needed
-                String setterName = "set" + capitalize(fieldName);
-                if (typeAnalyzer.isPrimitive(component)) {
-                    methodBuilder.addStatement("builder.$L(source.$L())", setterName, getterName);
-                } else {
-                    methodBuilder
-                            .beginControlFlow("if (source.$L() != null)", getterName)
-                            .addStatement("builder.$L(source.$L())", setterName, getterName)
-                            .endControlFlow();
-                }
+                methodBuilder.addStatement("builder.$L(source.$L())", setterName, getterName);
+            } else {
+                // For reference types, check null before setting
+                methodBuilder
+                        .beginControlFlow("if (source.$L() != null)", getterName)
+                        .addStatement("builder.$L(source.$L())", setterName, getterName)
+                        .endControlFlow();
             }
         }
 
@@ -260,145 +234,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         }
 
         methodBuilder.addStatement("this.$L = $L", fieldName, fieldName);
-
-        // Mark field as set using bitmap
-        methodBuilder.addStatement(PresenceBitmapHelper.generateSetBitStatement(fieldIndex, totalFields));
-
-        methodBuilder.addStatement("return this");
-
-        return methodBuilder.build();
-    }
-
-    private MethodSpec generateAddMethod(
-            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
-        String fieldName = component.getSimpleName().toString();
-        String methodName = "add" + capitalize(fieldName);
-        TypeMirror elementType = typeNameBuilder.getTypeArgument(component.asType(), 0);
-        boolean isElementNullable = typeAnalyzer.isTypeNullable(elementType);
-        Class<?> implClass = CollectionHelper.getCollectionImplClass(component.asType());
-
-        TypeName elementTypeName = typeNameBuilder.getTypeNameWithAnnotations(elementType);
-        ParameterSpec parameter = ParameterSpec.builder(elementTypeName, "item").build();
-
-        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(methodName)
-                .addModifiers(Modifier.PUBLIC)
-                .returns(builderClassName)
-                .addParameter(parameter);
-        if (!isElementNullable) {
-            methodBuilder.addStatement("$T.requireNonNull(item, \"item cannot be null\")", Objects.class);
-        }
-        methodBuilder
-                .beginControlFlow("if (this.$L == null)", fieldName)
-                .addStatement("this.$L = new $T<>()", fieldName, implClass)
-                .endControlFlow()
-                .addStatement("this.$L.add(item)", fieldName);
-
-        // Mark field as set using bitmap
-        methodBuilder.addStatement(PresenceBitmapHelper.generateSetBitStatement(fieldIndex, totalFields));
-
-        methodBuilder.addStatement("return this");
-
-        return methodBuilder.build();
-    }
-
-    private MethodSpec generateAddAllMethod(
-            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
-        String fieldName = component.getSimpleName().toString();
-        String methodName = "addAll" + capitalize(fieldName);
-        TypeMirror elementType = typeNameBuilder.getTypeArgument(component.asType(), 0);
-        Class<?> implClass = CollectionHelper.getCollectionImplClass(component.asType());
-
-        // Get TypeName with annotations preserved
-        TypeName elementTypeName = typeNameBuilder.getTypeNameWithAnnotations(elementType);
-        ParameterizedTypeName collectionType =
-                ParameterizedTypeName.get(ClassName.get(Iterable.class), elementTypeName);
-
-        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(methodName)
-                .addModifiers(Modifier.PUBLIC)
-                .returns(builderClassName)
-                .addParameter(collectionType, "items")
-                .addStatement("$T.requireNonNull(items, \"items cannot be null\")", Objects.class)
-                .beginControlFlow("if (this.$L == null)", fieldName)
-                .addStatement("this.$L = new $T<>()", fieldName, implClass)
-                .endControlFlow()
-                .beginControlFlow("for ($T item : items)", elementTypeName)
-                .addStatement("this.$L.add(item)", fieldName)
-                .endControlFlow();
-
-        // Mark field as set using bitmap
-        methodBuilder.addStatement(PresenceBitmapHelper.generateSetBitStatement(fieldIndex, totalFields));
-
-        methodBuilder.addStatement("return this");
-
-        return methodBuilder.build();
-    }
-
-    private MethodSpec generatePutMethod(
-            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
-        String fieldName = component.getSimpleName().toString();
-        String methodName = "put" + capitalize(fieldName);
-        TypeMirror keyType = typeNameBuilder.getTypeArgument(component.asType(), 0);
-        TypeMirror valueType = typeNameBuilder.getTypeArgument(component.asType(), 1);
-        boolean isKeyTypeNullable = typeAnalyzer.isTypeNullable(keyType);
-        boolean isValueTypeNullable = typeAnalyzer.isTypeNullable(valueType);
-
-        // Get TypeName with annotations preserved
-        TypeName keyTypeName = typeNameBuilder.getTypeNameWithAnnotations(keyType);
-        TypeName valueTypeName = typeNameBuilder.getTypeNameWithAnnotations(valueType);
-
-        ParameterSpec.Builder keyParamBuilder = ParameterSpec.builder(keyTypeName, "key");
-        ParameterSpec.Builder valueParamBuilder = ParameterSpec.builder(valueTypeName, "value");
-
-        Class<?> implClass = CollectionHelper.getMapImplClass(component.asType());
-
-        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(methodName)
-                .addModifiers(Modifier.PUBLIC)
-                .returns(builderClassName)
-                .addParameter(keyParamBuilder.build())
-                .addParameter(valueParamBuilder.build());
-        if (!isKeyTypeNullable) {
-            methodBuilder.addStatement("$T.requireNonNull(key, \"key cannot be null\")", Objects.class);
-        }
-        if (!isValueTypeNullable) {
-            methodBuilder.addStatement("$T.requireNonNull(value, \"value cannot be null\")", Objects.class);
-        }
-        methodBuilder
-                .beginControlFlow("if (this.$L == null)", fieldName)
-                .addStatement("this.$L = new $T<>()", fieldName, implClass)
-                .endControlFlow()
-                .addStatement("this.$L.put(key, value)", fieldName);
-
-        // Mark field as set using bitmap
-        methodBuilder.addStatement(PresenceBitmapHelper.generateSetBitStatement(fieldIndex, totalFields));
-
-        methodBuilder.addStatement("return this");
-
-        return methodBuilder.build();
-    }
-
-    private MethodSpec generatePutAllMethod(
-            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
-        String fieldName = component.getSimpleName().toString();
-        String methodName = "putAll" + capitalize(fieldName);
-        TypeMirror keyType = typeNameBuilder.getTypeArgument(component.asType(), 0);
-        TypeMirror valueType = typeNameBuilder.getTypeArgument(component.asType(), 1);
-
-        // Get TypeName with annotations preserved
-        TypeName keyTypeName = typeNameBuilder.getTypeNameWithAnnotations(keyType);
-        TypeName valueTypeName = typeNameBuilder.getTypeNameWithAnnotations(valueType);
-        ParameterizedTypeName mapType = ParameterizedTypeName.get(ClassName.get(Map.class), keyTypeName, valueTypeName);
-
-        Class<?> implClass = CollectionHelper.getMapImplClass(component.asType());
-
-        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(methodName)
-                .addModifiers(Modifier.PUBLIC)
-                .returns(builderClassName)
-                .addParameter(mapType, "entries")
-                .addStatement("$T.requireNonNull(entries, \"entries cannot be null\")", Objects.class)
-                .beginControlFlow("if (this.$L == null)", fieldName)
-                .addStatement("this.$L = new $T<>()", fieldName, implClass)
-                .endControlFlow()
-                .addStatement("this.$L.putAll(entries)", fieldName);
 
         // Mark field as set using bitmap
         methodBuilder.addStatement(PresenceBitmapHelper.generateSetBitStatement(fieldIndex, totalFields));
@@ -457,28 +292,15 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                             fieldName);
                 }
             } else {
-                // Interface collection types: wrap with unmodifiable collection
+                // Interface collection types: return directly
                 if (typeAnalyzer.isNullable(component)) {
-                    ClassName interfaceClass = CollectionHelper.getCollectionInterfaceClass(type);
-                    String unmodifiableMethod =
-                            interfaceClass.equals(ClassName.get(Set.class)) ? "unmodifiableSet" : "unmodifiableList";
-                    methodBuilder.addStatement(
-                            "return this.$L != null ? $T.$L(this.$L) : null",
-                            fieldName,
-                            Collections.class,
-                            unmodifiableMethod,
-                            fieldName);
+                    methodBuilder.addStatement("return this.$L", fieldName);
                 } else {
                     methodBuilder.addStatement(
-                            "$T.requireNonNull(this.$L, \"$L has not been set a value yet\")",
+                            "return $T.requireNonNull(this.$L, \"$L has not been set a value yet\")",
                             Objects.class,
                             fieldName,
                             fieldName);
-                    ClassName interfaceClass = CollectionHelper.getCollectionInterfaceClass(type);
-                    String unmodifiableMethod =
-                            interfaceClass.equals(ClassName.get(Set.class)) ? "unmodifiableSet" : "unmodifiableList";
-                    methodBuilder.addStatement(
-                            "return $T.$L(this.$L)", Collections.class, unmodifiableMethod, fieldName);
                 }
             }
         } else if (typeAnalyzer.isMap(component)) {
@@ -497,20 +319,15 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                             fieldName);
                 }
             } else {
-                // Interface map types: wrap with unmodifiable map
+                // Interface map types: return directly
                 if (typeAnalyzer.isNullable(component)) {
-                    methodBuilder.addStatement(
-                            "return this.$L != null ? $T.unmodifiableMap(this.$L) : null",
-                            fieldName,
-                            Collections.class,
-                            fieldName);
+                    methodBuilder.addStatement("return this.$L", fieldName);
                 } else {
                     methodBuilder.addStatement(
-                            "$T.requireNonNull(this.$L, \"$L has not been set a value yet\")",
+                            "return $T.requireNonNull(this.$L, \"$L has not been set a value yet\")",
                             Objects.class,
                             fieldName,
                             fieldName);
-                    methodBuilder.addStatement("return $T.unmodifiableMap(this.$L)", Collections.class, fieldName);
                 }
             }
         } else if (typeAnalyzer.isPrimitive(component) || typeAnalyzer.isNullable(component)) {
@@ -566,18 +383,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                     // Concrete collection types: pass directly without wrapping
                     returnStatement.add("this.$L", fieldName);
                 } else {
-                    // Interface collection types: wrap with unmodifiable collection
-                    ClassName interfaceClass = CollectionHelper.getCollectionInterfaceClass(type);
-                    String unmodifiableMethod =
-                            interfaceClass.equals(ClassName.get(Set.class)) ? "unmodifiableSet" : "unmodifiableList";
-
-                    // Return unmodifiable collection if not null, otherwise pass null
-                    returnStatement.add(
-                            "this.$L != null ? $T.$L(this.$L) : null",
-                            fieldName,
-                            Collections.class,
-                            unmodifiableMethod,
-                            fieldName);
+                    // Interface collection types: pass directly without wrapping
+                    returnStatement.add("this.$L", fieldName);
                 }
             } else if (typeAnalyzer.isMap(component)) {
                 TypeMirror type = component.asType();
@@ -587,13 +394,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                     // Concrete map types: pass directly without wrapping
                     returnStatement.add("this.$L", fieldName);
                 } else {
-                    // Interface map types: wrap with unmodifiable map
-                    // Return unmodifiable map if not null, otherwise pass null
-                    returnStatement.add(
-                            "this.$L != null ? $T.unmodifiableMap(this.$L) : null",
-                            fieldName,
-                            Collections.class,
-                            fieldName);
+                    // Interface map types: pass directly without wrapping
+                    returnStatement.add("this.$L", fieldName);
                 }
             } else {
                 returnStatement.add("this.$L", fieldName);
