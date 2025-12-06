@@ -556,16 +556,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         MethodSpec.Builder methodBuilder =
                 MethodSpec.methodBuilder("build").addModifiers(Modifier.PUBLIC).returns(recordClassName);
 
-        // Add null checks for non-nullable, non-primitive, non-collection fields
-        // Collections (Collection/Map) are allowed to be null and will be converted to empty collections
-        for (RecordComponentElement component : components) {
-            if (!isNullable(component) && !isPrimitive(component) && !isCollection(component) && !isMap(component)) {
-                String fieldName = component.getSimpleName().toString();
-                methodBuilder.addStatement(
-                        "$T.requireNonNull(this.$L, \"$L cannot be null\")", Objects.class, fieldName, fieldName);
-            }
-        }
-
         // Build the return statement
         CodeBlock.Builder returnStatement = CodeBlock.builder().add("return new $T(", recordClassName);
 
@@ -583,47 +573,23 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             // Use new collection + unmodifiable wrapper instead of copyOf() to support null elements
             if (isCollection(component)) {
                 ClassName interfaceClass = getCollectionInterfaceClass(component.asType());
-                boolean isFieldNullable = isNullable(component);
                 String unmodifiableMethod =
                         interfaceClass.equals(ClassName.get(Set.class)) ? "unmodifiableSet" : "unmodifiableList";
 
-                if (isFieldNullable) {
-                    // For nullable fields, return null if field is null
-                    returnStatement.add(
-                            "this.$L != null ? $T.$L(this.$L) : null",
-                            fieldName,
-                            Collections.class,
-                            unmodifiableMethod,
-                            fieldName);
-                } else {
-                    // For non-nullable fields, return empty collection if field is null
-                    returnStatement.add(
-                            "this.$L != null ? $T.$L(this.$L) : $T.of()",
-                            fieldName,
-                            Collections.class,
-                            unmodifiableMethod,
-                            fieldName,
-                            interfaceClass);
-                }
+                // Return unmodifiable collection if not null, otherwise pass null to record constructor
+                returnStatement.add(
+                        "this.$L != null ? $T.$L(this.$L) : null",
+                        fieldName,
+                        Collections.class,
+                        unmodifiableMethod,
+                        fieldName);
             } else if (isMap(component)) {
-                boolean isFieldNullable = isNullable(component);
-
-                if (isFieldNullable) {
-                    // For nullable fields, return null if field is null
-                    returnStatement.add(
-                            "this.$L != null ? $T.unmodifiableMap(this.$L) : null",
-                            fieldName,
-                            Collections.class,
-                            fieldName);
-                } else {
-                    // For non-nullable fields, return empty map if field is null
-                    returnStatement.add(
-                            "this.$L != null ? $T.unmodifiableMap(this.$L) : $T.of()",
-                            fieldName,
-                            Collections.class,
-                            fieldName,
-                            Map.class);
-                }
+                // Return unmodifiable map if not null, otherwise pass null to record constructor
+                returnStatement.add(
+                        "this.$L != null ? $T.unmodifiableMap(this.$L) : null",
+                        fieldName,
+                        Collections.class,
+                        fieldName);
             } else {
                 returnStatement.add("this.$L", fieldName);
             }

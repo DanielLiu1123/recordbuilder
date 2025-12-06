@@ -41,4 +41,11 @@ public record Everything(
         Map<@Nullable String, Integer> mapNullableStringInteger,
         Map<String, @Nullable Integer> mapStringNullableInteger,
         Map<@Nullable String, @Nullable Integer> mapNullableStringNullableInteger,
-        Map<String, List<@Nullable String>> mapStringListNullableString) {}
+        Map<String, List<@Nullable String>> mapStringListNullableString) {
+
+    // provide default values for fields
+    public Everything {
+        boolean_ = boolean_ != null ? boolean_ : false;
+        string = string != null ? string : "";
+    }
+}
