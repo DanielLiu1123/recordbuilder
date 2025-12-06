@@ -1,13 +1,17 @@
 plugins {
-    id "org.springframework.boot" version "${springBootVersion}" apply false
     id "com.diffplug.spotless" version "${spotlessVersion}" apply false
     id "com.github.spotbugs" version "${spotbugsVersion}" apply false
-    id "org.jreleaser" version "${jReleaserVersion}" apply false
 }
 
+//allprojects { // uncomment this if you want to get IDE support, only for debugging purpose!
 subprojects {
     apply plugin: "java"
     apply plugin: "java-library"
+
+    java {
+        sourceCompatibility = 17
+        targetCompatibility = 17
+    }
 
     tasks.withType(JavaCompile).configureEach {
         options.compilerArgs += ["-parameters"]
@@ -32,14 +36,6 @@ subprojects {
     }
 
     dependencies {
-        compileOnly("org.projectlombok:lombok:+")
-        annotationProcessor("org.projectlombok:lombok:+")
-        testCompileOnly("org.projectlombok:lombok:+")
-        testAnnotationProcessor("org.projectlombok:lombok:+")
-        compileOnly("com.github.spotbugs:spotbugs-annotations:${spotbugsAnnotationsVersion}")
-
-        api("org.jspecify:jspecify:+")
-
         testImplementation(platform("org.junit:junit-bom:+"))
         testImplementation("org.junit.jupiter:junit-jupiter")
         testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -78,5 +74,3 @@ subprojects {
         excludeFilter = file("${rootDir}/gradle/config/spotbugs/exclude.xml")
     }
 }
-
-apply from: "${rootDir}/gradle/jreleaser.gradle"

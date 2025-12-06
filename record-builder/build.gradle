@@ -1,0 +1,11 @@
+description = "Build your objects with confidence: nullless by default, spec driven, inspired by protobuf"
+
+dependencies {
+    implementation "com.palantir.javapoet:javapoet:${javapoetVersion}"
+
+    testAnnotationProcessor project(":record-builder")
+    testImplementation "org.jspecify:jspecify:+"
+    testImplementation "com.google.testing.compile:compile-testing:${compileTestingVersion}"
+}
+
+apply from: "${rootDir}/gradle/deploy.gradle"

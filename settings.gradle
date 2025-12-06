@@ -1,6 +1,6 @@
-rootProject.name = "template-gradle"
+rootProject.name = "record-builder-root"
 
-include(":module-1")
+include(":record-builder")
 
 // Auto install git hooks
 java.util.Optional.of(new File("${rootDir}/.git/hooks")).filter { it.exists() && it.isDirectory() }.ifPresent {
