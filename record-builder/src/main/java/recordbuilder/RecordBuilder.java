@@ -13,9 +13,9 @@ import java.lang.annotation.Target;
  * <ul>
  *   <li>static of() method to create a new builder</li>
  *   <li>static from(record) method to create a builder from an existing record</li>
- *   <li>setXxx() setter methods for all fields</li>
- *   <li>addXxx()/addAllXxx() adder methods for Collection fields</li>
- *   <li>putXxx()/putAllXxx() putter methods for Map fields</li>
+ *   <li>setXxx() setter methods for all non-collection and non-map fields</li>
+ *   <li>addXxx()/addAllXxx() adder methods for collection fields</li>
+ *   <li>putXxx()/putAllXxx() putter methods for map fields</li>
  *   <li>getXxx() getter methods for all fields</li>
  *   <li>hasXxx() presence checker methods for all fields</li>
  *   <li>clearXxx() clearer methods for all fields</li>
