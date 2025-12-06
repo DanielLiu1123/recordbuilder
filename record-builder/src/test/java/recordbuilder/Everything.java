@@ -28,6 +28,10 @@ public record Everything(
         @Nullable String nullableString,
         LocalDate localDate,
         @Nullable LocalDate nullableLocalDate,
+        Everything.JavaRecord javaRecord,
+        Everything.@Nullable JavaRecord nullableJavaRecord,
+        Everything.JavaClass javaClass,
+        Everything.@Nullable JavaClass nullableJavaClass,
 
         // collection types
         List<String> listString,
@@ -41,11 +45,21 @@ public record Everything(
         Map<@Nullable String, Integer> mapNullableStringInteger,
         Map<String, @Nullable Integer> mapStringNullableInteger,
         Map<@Nullable String, @Nullable Integer> mapNullableStringNullableInteger,
-        Map<String, List<@Nullable String>> mapStringListNullableString) {
+        Map<String, List<@Nullable String>> mapStringListNullableString,
+        Map<String, Everything.@Nullable JavaRecord> mapStringNullableJavaRecord,
+        Map<String, List<Everything.@Nullable JavaRecord>> mapStringListNullableJavaRecord,
+        Map<String, Map<Everything.@Nullable JavaClass, Everything.@Nullable JavaRecord>>
+                mapStringMapNullableJavaClassNullableJavaRecord) {
 
     // provide default values for fields
     public Everything {
         boolean_ = boolean_ != null ? boolean_ : false;
         string = string != null ? string : "";
+    }
+
+    record JavaRecord(String field) {}
+
+    static class JavaClass {
+        public String field;
     }
 }

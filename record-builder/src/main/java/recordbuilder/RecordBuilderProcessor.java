@@ -106,20 +106,18 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         for (RecordComponentElement component : components) {
             String fieldName = component.getSimpleName().toString();
             TypeName fieldType = getBuilderFieldType(component);
-            FieldSpec.Builder fieldBuilder = FieldSpec.builder(fieldType, fieldName, Modifier.PRIVATE);
 
             // Add @Nullable annotation for all non-primitive fields in builder
             // (Builder fields can be null during construction, even if record field is non-null)
-            if (!isPrimitive(component)) {
-                if (isNullable(component)) {
-                    // Use the existing @Nullable annotation from the record
-                    fieldBuilder.addAnnotation(getNullableAnnotation(component));
-                } else {
-                    // Add default @Nullable annotation for non-primitive, non-nullable record fields
-                    fieldBuilder.addAnnotation(ClassName.get("org.jspecify.annotations", "Nullable"));
-                }
+            if (!isPrimitive(component) && !isNullable(component)) {
+                // For non-nullable fields in the record, add @Nullable as a type annotation to the builder field
+                // Use annotated() to ensure correct placement for qualified types (e.g., Outer.@Nullable Inner)
+                ClassName nullableAnnotation = ClassName.get("org.jspecify.annotations", "Nullable");
+                fieldType = fieldType.annotated(
+                        AnnotationSpec.builder(nullableAnnotation).build());
             }
 
+            FieldSpec.Builder fieldBuilder = FieldSpec.builder(fieldType, fieldName, Modifier.PRIVATE);
             builderClassBuilder.addField(fieldBuilder.build());
         }
 
@@ -215,7 +213,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             return ParameterizedTypeName.get(ClassName.get(Map.class), keyTypeName, valueTypeName);
         }
 
-        return TypeName.get(type);
+        // For non-collection and non-map types, use getTypeNameWithAnnotations to preserve type annotations
+        return getTypeNameWithAnnotations(type);
     }
 
     private MethodSpec generateFromMethod(
@@ -267,15 +266,13 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "set" + capitalize(fieldName);
-        TypeName fieldType = TypeName.get(component.asType());
+        // Use getTypeNameWithAnnotations to preserve type annotations
+        TypeName fieldType = getTypeNameWithAnnotations(component.asType());
 
         ParameterSpec.Builder paramBuilder = ParameterSpec.builder(fieldType, fieldName);
 
-        // Add @Nullable annotation if the field is nullable
-        boolean isFieldNullable = isNullable(component);
-        if (isFieldNullable) {
-            paramBuilder.addAnnotation(getNullableAnnotation(component));
-        }
+        // Note: @Nullable annotation is already included in fieldType via getTypeNameWithAnnotations
+        // Don't add it again to avoid duplication or incorrect placement for qualified types
 
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
@@ -283,6 +280,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addParameter(paramBuilder.build());
 
         // Add null check for non-nullable, non-primitive fields
+        boolean isFieldNullable = isNullable(component);
         if (!isFieldNullable && !isPrimitive(component)) {
             methodBuilder.addStatement(
                     "$T.requireNonNull($L, \"$L cannot be null\")", Objects.class, fieldName, fieldName);
@@ -373,14 +371,15 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         boolean isKeyTypeNullable = isTypeNullable(keyType);
         boolean isValueTypeNullable = isTypeNullable(valueType);
 
-        ParameterSpec.Builder keyParamBuilder = ParameterSpec.builder(TypeName.get(keyType), "key");
-        ParameterSpec.Builder valueParamBuilder = ParameterSpec.builder(TypeName.get(valueType), "value");
-        if (isKeyTypeNullable) {
-            keyParamBuilder.addAnnotation(getNullableAnnotationFromType(keyType));
-        }
-        if (isValueTypeNullable) {
-            valueParamBuilder.addAnnotation(getNullableAnnotationFromType(valueType));
-        }
+        // Get TypeName with annotations preserved
+        TypeName keyTypeName = getTypeNameWithAnnotations(keyType);
+        TypeName valueTypeName = getTypeNameWithAnnotations(valueType);
+
+        ParameterSpec.Builder keyParamBuilder = ParameterSpec.builder(keyTypeName, "key");
+        ParameterSpec.Builder valueParamBuilder = ParameterSpec.builder(valueTypeName, "value");
+
+        // Note: @Nullable annotation is already included in keyTypeName/valueTypeName via getTypeNameWithAnnotations
+        // Don't add it again to avoid duplication or incorrect placement for qualified types
 
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
@@ -530,10 +529,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                     fieldName);
         }
 
-        // Add @Nullable annotation if the field is nullable in the record
-        if (isNullable(component)) {
-            methodBuilder.addAnnotation(getNullableAnnotation(component));
-        }
+        // Note: @Nullable annotation is already included in fieldType via getBuilderFieldType
+        // Don't add it again to avoid duplication
 
         return methodBuilder.build();
     }
