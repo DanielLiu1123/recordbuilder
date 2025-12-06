@@ -37,6 +37,12 @@ public record Everything(
         List<String> listString,
         @Nullable List<String> nullableListString,
         List<@Nullable String> listNullableString,
+        List<Everything.JavaRecord> listJavaRecord,
+        List<Everything.@Nullable JavaRecord> listNullableJavaRecord,
+        List<Everything.JavaClass> listJavaClass,
+        List<Everything.@Nullable JavaClass> listNullableJavaClass,
+        List<Map<Everything.@Nullable JavaClass, Everything.@Nullable JavaRecord>>
+                listMapNullableJavaClassNullableJavaRecord,
         Set<String> setString,
         @Nullable Set<String> nullableSetString,
         Set<@Nullable String> setNullableString,

@@ -304,15 +304,14 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         boolean isElementNullable = isTypeNullable(elementType);
         Class<?> implClass = getCollectionImplClass(component.asType());
 
-        ParameterSpec.Builder paramBuilder = ParameterSpec.builder(TypeName.get(elementType), "item");
-        if (isElementNullable) {
-            paramBuilder.addAnnotation(getNullableAnnotationFromType(elementType));
-        }
+        // Use getTypeNameWithAnnotations to correctly handle qualified types like Everything.@Nullable JavaRecord
+        TypeName elementTypeName = getTypeNameWithAnnotations(elementType);
+        ParameterSpec parameter = ParameterSpec.builder(elementTypeName, "item").build();
 
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
                 .returns(builderClassName)
-                .addParameter(paramBuilder.build());
+                .addParameter(parameter);
         if (!isElementNullable) {
             methodBuilder.addStatement("$T.requireNonNull(item, \"item cannot be null\")", Objects.class);
         }
