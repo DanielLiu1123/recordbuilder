@@ -1,0 +1,10 @@
+rootProject.name = "template-gradle"
+
+include(":module-1")
+
+// Auto install git hooks
+java.util.Optional.of(new File("${rootDir}/.git/hooks")).filter { it.exists() && it.isDirectory() }.ifPresent {
+    new File("${rootDir}/.githooks").eachFile(groovy.io.FileType.FILES) {
+        java.nio.file.Files.copy(it.toPath(), new File("${rootDir}/.git/hooks", it.name).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    }
+}
