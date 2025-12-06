@@ -1,6 +1,9 @@
 package recordbuilder;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -55,7 +58,13 @@ public record Everything(
         Map<String, Everything.@Nullable JavaRecord> mapStringNullableJavaRecord,
         Map<String, List<Everything.@Nullable JavaRecord>> mapStringListNullableJavaRecord,
         Map<String, Map<Everything.@Nullable JavaClass, Everything.@Nullable JavaRecord>>
-                mapStringMapNullableJavaClassNullableJavaRecord) {
+                mapStringMapNullableJavaClassNullableJavaRecord,
+        ArrayList<String> arrayListString,
+        @Nullable ArrayList<String> nullableArrayListString,
+        HashMap<String, Integer> hashMapStringInteger,
+        @Nullable HashMap<String, Integer> nullableHashMapStringInteger,
+        HashSet<String> hashSetString,
+        @Nullable HashSet<String> nullableHashSetString) {
 
     // provide default values for fields
     public Everything {
