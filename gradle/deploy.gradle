@@ -74,7 +74,15 @@ publishing {
 
     repositories {
         maven {
-            url = layout.buildDirectory.dir("repo")
+            if (project.version.toString().endsWith("-SNAPSHOT")) {
+                url = "https://central.sonatype.com/repository/maven-snapshots"
+                credentials {
+                    username = System.getenv("MAVENCENTRAL_USERNAME")
+                    password = System.getenv("MAVENCENTRAL_PASSWORD")
+                }
+            } else {
+                url = layout.buildDirectory.dir("repo")
+            }
         }
     }
 }
