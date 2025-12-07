@@ -1,6 +1,25 @@
 plugins {
     id "com.diffplug.spotless" version "${spotlessVersion}" apply false
     id "com.github.spotbugs" version "${spotbugsVersion}" apply false
+    id "io.github.danielliu1123.deployer"
+}
+
+deploy {
+    release {
+        dir = file("${rootDir}/build/staging-deploy")
+        username = System.getenv("MAVENCENTRAL_USERNAME")
+        password = System.getenv("MAVENCENTRAL_PASSWORD")
+        sign {
+            secretKey = System.getenv("GPG_SECRET_KEY")
+            publicKey = System.getenv("GPG_PUBLIC_KEY")
+            passphrase = System.getenv("GPG_PASSPHRASE")
+        }
+    }
+    snapshot {
+        dir = file("${rootDir}/build/staging-deploy")
+        username = System.getenv("MAVENCENTRAL_USERNAME")
+        password = System.getenv("MAVENCENTRAL_PASSWORD")
+    }
 }
 
 //allprojects { // uncomment this if you want to get IDE support, only for debugging purpose!

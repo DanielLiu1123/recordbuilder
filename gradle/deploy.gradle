@@ -79,6 +79,10 @@ publishing {
     }
 }
 
+clean {
+    delete "${rootDir}/build/staging-deploy"
+}
+
 def getDependencies(String configurationName) {
     def result = []
     def cfg = project.configurations.findByName(configurationName)

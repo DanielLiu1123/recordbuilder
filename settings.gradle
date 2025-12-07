@@ -1,3 +1,7 @@
+pluginManagement {
+    includeBuild("./deployer-plugin")
+}
+
 rootProject.name = "record-builder-root"
 
 include(":record-builder")

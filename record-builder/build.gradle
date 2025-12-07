@@ -1,10 +1,10 @@
-description = "Build your objects with confidence: nullless by default, spec driven, inspired by protobuf"
+description = "Annotation processor to generate builder classes for Java records. Build your objects with confidence: nullless by default, spec driven, inspired by protobuf"
 
 dependencies {
     implementation "com.palantir.javapoet:javapoet:${javapoetVersion}"
 
     testAnnotationProcessor project(":record-builder")
-    testImplementation "org.jspecify:jspecify:+"
+    testImplementation "org.jspecify:jspecify:${jspecifyVersion}"
     testImplementation "com.google.testing.compile:compile-testing:${compileTestingVersion}"
 }
 
