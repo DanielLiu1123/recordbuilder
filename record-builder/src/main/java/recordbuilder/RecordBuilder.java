@@ -17,6 +17,7 @@ import java.lang.annotation.Target;
  *   <li>getXxx() getter methods for all fields</li>
  *   <li>hasXxx() presence checker methods for all fields</li>
  *   <li>clearXxx() clearer methods for all fields</li>
+ *   <li>merge(builder) method to merge values from another builder</li>
  * </ul>
  *
  * <p>

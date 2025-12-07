@@ -140,7 +140,10 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .build());
 
         // Add static from() method
-        builderClassBuilder.addMethod(generateFromMethod(recordClassName, builderClassName, components));
+        builderClassBuilder.addMethod(generateFromMethod(recordClassName, builderClassName));
+
+        // Add merge() method
+        builderClassBuilder.addMethod(generateMergeMethod(recordClassName, builderClassName, components));
 
         // Add setter methods for all fields
         for (int i = 0; i < components.size(); i++) {
@@ -177,34 +180,13 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         javaFile.writeTo(filer);
     }
 
-    private MethodSpec generateFromMethod(
-            ClassName recordClassName, ClassName builderClassName, List<? extends RecordComponentElement> components) {
-        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("from")
+    private MethodSpec generateFromMethod(ClassName recordClassName, ClassName builderClassName) {
+        return MethodSpec.methodBuilder("from")
                 .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                 .returns(builderClassName)
                 .addParameter(recordClassName, "source")
-                .addStatement("$T builder = new $T()", builderClassName, builderClassName);
-
-        for (RecordComponentElement component : components) {
-            String fieldName = component.getSimpleName().toString();
-            String getterName = fieldName;
-            String setterName = "set" + capitalize(fieldName);
-
-            // Use setter method for all fields
-            if (isPrimitive(component)) {
-                // If primitive, no null check needed
-                methodBuilder.addStatement("builder.$L(source.$L())", setterName, getterName);
-            } else {
-                // For reference types, check null before setting
-                methodBuilder
-                        .beginControlFlow("if (source.$L() != null)", getterName)
-                        .addStatement("builder.$L(source.$L())", setterName, getterName)
-                        .endControlFlow();
-            }
-        }
-
-        methodBuilder.addStatement("return builder");
-        return methodBuilder.build();
+                .addStatement("return new $T().merge(source)", builderClassName)
+                .build();
     }
 
     private MethodSpec generateSetterMethod(
@@ -320,6 +302,37 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         returnStatement.add(")");
         methodBuilder.addStatement(returnStatement.build());
+
+        return methodBuilder.build();
+    }
+
+    private MethodSpec generateMergeMethod(
+            ClassName recordClassName, ClassName builderClassName, List<? extends RecordComponentElement> components) {
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("merge")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(builderClassName)
+                .addParameter(recordClassName, "other")
+                .addStatement("$T.requireNonNull(other, \"other cannot be null\")", Objects.class);
+
+        for (RecordComponentElement component : components) {
+            String fieldName = component.getSimpleName().toString();
+            String getterName = fieldName;
+            String setterName = "set" + capitalize(fieldName);
+
+            // Use setter method for all fields
+            if (isPrimitive(component)) {
+                // If primitive, no null check needed
+                methodBuilder.addStatement("this.$L(other.$L())", setterName, getterName);
+            } else {
+                // For reference types, check null before setting
+                methodBuilder
+                        .beginControlFlow("if (other.$L() != null)", getterName)
+                        .addStatement("this.$L(other.$L())", setterName, getterName)
+                        .endControlFlow();
+            }
+        }
+
+        methodBuilder.addStatement("return this");
 
         return methodBuilder.build();
     }
