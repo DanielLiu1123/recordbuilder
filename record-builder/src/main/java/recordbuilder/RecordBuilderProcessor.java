@@ -1,11 +1,13 @@
 package recordbuilder;
 
+import com.palantir.javapoet.AnnotationSpec;
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.CodeBlock;
 import com.palantir.javapoet.FieldSpec;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.MethodSpec;
 import com.palantir.javapoet.ParameterSpec;
+import com.palantir.javapoet.ParameterizedTypeName;
 import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
 import java.io.IOException;
@@ -18,11 +20,15 @@ import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
+import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.RecordComponentElement;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 
@@ -33,11 +39,11 @@ import javax.tools.Diagnostic;
  */
 public final class RecordBuilderProcessor extends AbstractProcessor {
 
+    private static final String PRESENCE_MASK_FIELD = "_presenceMask0_";
+
     private Filer filer;
     private Messager messager;
     private Elements elementUtils;
-    private TypeAnalyzer typeAnalyzer;
-    private TypeNameBuilder typeNameBuilder;
 
     @Override
     public SourceVersion getSupportedSourceVersion() {
@@ -55,8 +61,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         this.filer = processingEnv.getFiler();
         this.messager = processingEnv.getMessager();
         this.elementUtils = processingEnv.getElementUtils();
-        this.typeAnalyzer = new TypeAnalyzer();
-        this.typeNameBuilder = new TypeNameBuilder(elementUtils, typeAnalyzer);
     }
 
     @Override
@@ -95,7 +99,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // Add fields
         for (RecordComponentElement component : components) {
             String fieldName = component.getSimpleName().toString();
-            TypeName fieldType = typeNameBuilder.getFieldType(component);
+            TypeName fieldType = getTypeNameWithAnnotations(component.asType());
 
             FieldSpec.Builder fieldBuilder = FieldSpec.builder(fieldType, fieldName, Modifier.PRIVATE);
             builderClassBuilder.addField(fieldBuilder.build());
@@ -181,7 +185,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             String setterName = "set" + capitalize(fieldName);
 
             // Use setter method for all fields
-            if (typeAnalyzer.isPrimitive(component)) {
+            if (isPrimitive(component)) {
                 // If primitive, no null check needed
                 methodBuilder.addStatement("builder.$L(source.$L())", setterName, getterName);
             } else {
@@ -201,8 +205,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "set" + capitalize(fieldName);
-        // Use typeNameBuilder to preserve type annotations
-        TypeName fieldType = typeNameBuilder.getTypeNameWithAnnotations(component.asType());
+        // Use getTypeNameWithAnnotations to preserve type annotations
+        TypeName fieldType = getTypeNameWithAnnotations(component.asType());
 
         ParameterSpec.Builder paramBuilder = ParameterSpec.builder(fieldType, fieldName);
 
@@ -212,8 +216,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addParameter(paramBuilder.build());
 
         // Add null check for non-nullable, non-primitive fields
-        boolean isFieldNullable = typeAnalyzer.isNullable(component);
-        if (!isFieldNullable && !typeAnalyzer.isPrimitive(component)) {
+        boolean isFieldNullable = isNullable(component);
+        if (!isFieldNullable && !isPrimitive(component)) {
             methodBuilder.addStatement(
                     "$T.requireNonNull($L, \"$L cannot be null\")", Objects.class, fieldName, fieldName);
         }
@@ -221,7 +225,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         methodBuilder.addStatement("this.$L = $L", fieldName, fieldName);
 
         // Mark field as set using bitmap
-        methodBuilder.addStatement(PresenceBitmapHelper.generateSetBitStatement(fieldIndex, totalFields));
+        methodBuilder.addStatement(generateSetBitStatement(fieldIndex, totalFields));
 
         methodBuilder.addStatement("return this");
 
@@ -238,15 +242,15 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .returns(builderClassName);
 
         // For primitive types, set to zero value; for reference types, set to null
-        if (typeAnalyzer.isPrimitive(component)) {
-            String zeroValue = typeAnalyzer.getPrimitiveZeroValue(component);
+        if (isPrimitive(component)) {
+            String zeroValue = getPrimitiveZeroValue(component);
             methodBuilder.addStatement("this.$L = $L", fieldName, zeroValue);
         } else {
             methodBuilder.addStatement("this.$L = null", fieldName);
         }
 
         // Clear the bit in bitmap
-        methodBuilder.addStatement(PresenceBitmapHelper.generateClearBitStatement(fieldIndex, totalFields));
+        methodBuilder.addStatement(generateClearBitStatement(fieldIndex, totalFields));
 
         methodBuilder.addStatement("return this");
         return methodBuilder.build();
@@ -255,13 +259,13 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     private MethodSpec generateGetterMethod(RecordComponentElement component) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "get" + capitalize(fieldName);
-        TypeName fieldType = typeNameBuilder.getFieldType(component);
+        TypeName fieldType = getTypeNameWithAnnotations(component.asType());
 
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
                 .returns(fieldType);
 
-        if (typeAnalyzer.isPrimitive(component) || typeAnalyzer.isNullable(component)) {
+        if (isPrimitive(component) || isNullable(component)) {
             methodBuilder.addStatement("return this.$L", fieldName);
         } else {
             methodBuilder.addStatement(
@@ -278,7 +282,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         String fieldName = component.getSimpleName().toString();
         String methodName = "has" + capitalize(fieldName);
 
-        CodeBlock checkBitExpression = PresenceBitmapHelper.generateCheckBitExpression(fieldIndex, totalFields);
+        CodeBlock checkBitExpression = generateCheckBitExpression(fieldIndex, totalFields);
 
         return MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
@@ -319,5 +323,150 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             return str;
         }
         return str.substring(0, 1).toUpperCase() + str.substring(1);
+    }
+
+    private boolean isNullable(RecordComponentElement component) {
+        // Check element annotations (for @Nullable on the parameter itself)
+        boolean hasElementAnnotation = component.getAnnotationMirrors().stream().anyMatch(this::isNullableAnnotation);
+
+        // Check type annotations (for @Nullable on the type, like jspecify)
+        boolean hasTypeAnnotation =
+                component.asType().getAnnotationMirrors().stream().anyMatch(this::isNullableAnnotation);
+
+        return hasElementAnnotation || hasTypeAnnotation;
+    }
+
+    private boolean isTypeNullable(TypeMirror type) {
+        return type.getAnnotationMirrors().stream().anyMatch(this::isNullableAnnotation);
+    }
+
+    private boolean isNullableAnnotation(AnnotationMirror annotation) {
+        String qualifiedName = ((TypeElement) annotation.getAnnotationType().asElement())
+                .getQualifiedName()
+                .toString();
+        return qualifiedName.equals("org.jspecify.annotations.Nullable")
+                || qualifiedName.equals("javax.annotation.Nullable")
+                || qualifiedName.equals("jakarta.annotation.Nullable")
+                || qualifiedName.equals("org.jetbrains.annotations.Nullable")
+                || qualifiedName.equals("androidx.annotation.Nullable")
+                || qualifiedName.equals("org.checkerframework.checker.nullness.qual.Nullable")
+                || qualifiedName.equals("edu.umd.cs.findbugs.annotations.Nullable");
+    }
+
+    private boolean isPrimitive(RecordComponentElement component) {
+        return component.asType().getKind().isPrimitive();
+    }
+
+    private String getPrimitiveZeroValue(RecordComponentElement component) {
+        TypeKind kind = component.asType().getKind();
+        return switch (kind) {
+            case BOOLEAN -> "false";
+            case BYTE, SHORT, INT, LONG -> "0";
+            case CHAR -> "'\\0'";
+            case FLOAT -> "0.0f";
+            case DOUBLE -> "0.0";
+            default -> throw new IllegalArgumentException("Not a primitive type: " + kind);
+        };
+    }
+
+    private TypeName getTypeNameWithAnnotations(TypeMirror type) {
+        TypeName typeName = TypeName.get(type);
+
+        // Recursively handle parameterized types to preserve nested annotations
+        if (type.getKind() == TypeKind.DECLARED) {
+            DeclaredType declaredType = (DeclaredType) type;
+            List<? extends TypeMirror> typeArguments = declaredType.getTypeArguments();
+
+            if (!typeArguments.isEmpty()) {
+                // Recursively process each type argument
+                TypeName[] typeArgumentNames = new TypeName[typeArguments.size()];
+                for (int i = 0; i < typeArguments.size(); i++) {
+                    typeArgumentNames[i] = getTypeNameWithAnnotations(typeArguments.get(i));
+                }
+
+                // Reconstruct the parameterized type
+                TypeElement typeElement = (TypeElement) declaredType.asElement();
+                ClassName rawType = ClassName.get(typeElement);
+                typeName = ParameterizedTypeName.get(rawType, typeArgumentNames);
+            }
+        }
+
+        // Add @Nullable annotation to the top-level type if present
+        if (isTypeNullable(type)) {
+            ClassName nullableAnnotation = getNullableAnnotationFromType(type);
+            typeName = typeName.annotated(
+                    AnnotationSpec.builder(nullableAnnotation).build());
+        }
+
+        return typeName;
+    }
+
+    /**
+     * Gets the nullable annotation from a type.
+     */
+    private ClassName getNullableAnnotationFromType(TypeMirror type) {
+        for (AnnotationMirror annotation : type.getAnnotationMirrors()) {
+            if (isNullableAnnotation(annotation)) {
+                return createClassName(annotation);
+            }
+        }
+
+        // Default fallback
+        return ClassName.get("org.jspecify.annotations", "Nullable");
+    }
+
+    private ClassName createClassName(AnnotationMirror annotation) {
+        TypeElement annotationType =
+                (TypeElement) annotation.getAnnotationType().asElement();
+        String packageName =
+                elementUtils.getPackageOf(annotationType).getQualifiedName().toString();
+        String simpleName = annotationType.getSimpleName().toString();
+        return ClassName.get(packageName, simpleName);
+    }
+
+    private static CodeBlock generateSetBitStatement(int bitIndex, int totalFields) {
+        if (totalFields <= 32) {
+            // Use int bitmap
+            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + " |= $L", "(1 << " + bitIndex + ")");
+        } else if (totalFields <= 64) {
+            // Use long bitmap
+            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + " |= $L", "(1L << " + bitIndex + ")");
+        } else {
+            // Use long array bitmap
+            int arrayIndex = bitIndex / 64;
+            int bitOffset = bitIndex % 64;
+            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + "[$L] |= $L", arrayIndex, "(1L << " + bitOffset + ")");
+        }
+    }
+
+    private static CodeBlock generateCheckBitExpression(int bitIndex, int totalFields) {
+        if (totalFields <= 32) {
+            // Use int bitmap
+            return CodeBlock.of("(this." + PRESENCE_MASK_FIELD + " & $L) != 0", "(1 << " + bitIndex + ")");
+        } else if (totalFields <= 64) {
+            // Use long bitmap
+            return CodeBlock.of("(this." + PRESENCE_MASK_FIELD + " & $L) != 0", "(1L << " + bitIndex + ")");
+        } else {
+            // Use long array bitmap
+            int arrayIndex = bitIndex / 64;
+            int bitOffset = bitIndex % 64;
+            return CodeBlock.of(
+                    "(this." + PRESENCE_MASK_FIELD + "[$L] & $L) != 0", arrayIndex, "(1L << " + bitOffset + ")");
+        }
+    }
+
+    private static CodeBlock generateClearBitStatement(int bitIndex, int totalFields) {
+        if (totalFields <= 32) {
+            // Use int bitmap
+            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + " &= ~$L", "(1 << " + bitIndex + ")");
+        } else if (totalFields <= 64) {
+            // Use long bitmap
+            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + " &= ~$L", "(1L << " + bitIndex + ")");
+        } else {
+            // Use long array bitmap
+            int arrayIndex = bitIndex / 64;
+            int bitOffset = bitIndex % 64;
+            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + "[$L] &= ~$L", arrayIndex, "(1L << " + bitOffset + ")");
+        }
     }
 }
