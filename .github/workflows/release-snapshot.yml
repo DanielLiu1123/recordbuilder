@@ -18,7 +18,7 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       - name: Build
         run: ./gradlew build --no-daemon --stacktrace
@@ -28,4 +28,4 @@ jobs:
           MAVENCENTRAL_USERNAME: ${{ secrets.MAVENCENTRAL_USERNAME }}
           MAVENCENTRAL_PASSWORD: ${{ secrets.MAVENCENTRAL_PASSWORD }}
         run: |
-          ./gradlew publish jreleaserDeploy --no-daemon --stacktrace
+          ./gradlew clean publish --no-daemon
