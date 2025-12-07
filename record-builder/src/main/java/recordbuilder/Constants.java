@@ -24,12 +24,6 @@ final class Constants {
     // Field names
     static final String PRESENCE_MASK_FIELD = "_presenceMask0_";
 
-    // Method prefixes
-    static final String SET_PREFIX = "set";
-    static final String GET_PREFIX = "get";
-    static final String CLEAR_PREFIX = "clear";
-    static final String HAS_PREFIX = "has";
-
     private Constants() {
         throw new AssertionError("No instances");
     }

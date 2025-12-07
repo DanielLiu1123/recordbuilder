@@ -3,11 +3,8 @@ package recordbuilder;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.RecordComponentElement;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
 
 /**
  * Analyzes types and their characteristics for the record builder processor.
@@ -16,51 +13,7 @@ import javax.lang.model.util.Types;
  */
 final class TypeAnalyzer {
 
-    private final Elements elementUtils;
-    private final Types typeUtils;
-
-    TypeAnalyzer(Elements elementUtils, Types typeUtils) {
-        this.elementUtils = elementUtils;
-        this.typeUtils = typeUtils;
-    }
-
-    /**
-     * Checks if a record component is a collection type.
-     */
-    boolean isCollection(RecordComponentElement component) {
-        TypeMirror type = component.asType();
-        if (type.getKind() != TypeKind.DECLARED) {
-            return false;
-        }
-
-        TypeElement collectionType = elementUtils.getTypeElement("java.util.Collection");
-        if (collectionType == null) {
-            return false;
-        }
-
-        TypeMirror collectionTypeMirror = typeUtils.erasure(collectionType.asType());
-        TypeMirror erasedType = typeUtils.erasure(type);
-        return typeUtils.isAssignable(erasedType, collectionTypeMirror);
-    }
-
-    /**
-     * Checks if a record component is a map type.
-     */
-    boolean isMap(RecordComponentElement component) {
-        TypeMirror type = component.asType();
-        if (type.getKind() != TypeKind.DECLARED) {
-            return false;
-        }
-
-        TypeElement mapType = elementUtils.getTypeElement("java.util.Map");
-        if (mapType == null) {
-            return false;
-        }
-
-        TypeMirror mapTypeMirror = typeUtils.erasure(mapType.asType());
-        TypeMirror erasedType = typeUtils.erasure(type);
-        return typeUtils.isAssignable(erasedType, mapTypeMirror);
-    }
+    TypeAnalyzer() {}
 
     /**
      * Checks if a record component is nullable.
@@ -106,54 +59,6 @@ final class TypeAnalyzer {
      */
     boolean isPrimitive(RecordComponentElement component) {
         return component.asType().getKind().isPrimitive();
-    }
-
-    /**
-     * Checks if a type is a concrete collection implementation class
-     * (ArrayList, HashSet, LinkedHashSet, TreeSet, etc.)
-     */
-    boolean isConcreteCollectionType(TypeMirror type) {
-        if (type.getKind() != TypeKind.DECLARED) {
-            return false;
-        }
-
-        TypeElement typeElement = (TypeElement) ((DeclaredType) type).asElement();
-        String qualifiedName = typeElement.getQualifiedName().toString();
-
-        return qualifiedName.equals("java.util.ArrayList")
-                || qualifiedName.equals("java.util.HashSet")
-                || qualifiedName.equals("java.util.LinkedHashSet")
-                || qualifiedName.equals("java.util.TreeSet")
-                || qualifiedName.equals("java.util.LinkedList")
-                || qualifiedName.equals("java.util.ArrayDeque")
-                || qualifiedName.equals("java.util.Vector")
-                || qualifiedName.equals("java.util.Stack")
-                || qualifiedName.equals("java.util.concurrent.CopyOnWriteArrayList")
-                || qualifiedName.equals("java.util.concurrent.CopyOnWriteArraySet")
-                || qualifiedName.equals("java.util.concurrent.ConcurrentSkipListSet");
-    }
-
-    /**
-     * Checks if a type is a concrete map implementation class
-     * (HashMap, TreeMap, LinkedHashMap, etc.)
-     */
-    boolean isConcreteMapType(TypeMirror type) {
-        if (type.getKind() != TypeKind.DECLARED) {
-            return false;
-        }
-
-        TypeElement typeElement = (TypeElement) ((DeclaredType) type).asElement();
-        String qualifiedName = typeElement.getQualifiedName().toString();
-
-        return qualifiedName.equals("java.util.HashMap")
-                || qualifiedName.equals("java.util.TreeMap")
-                || qualifiedName.equals("java.util.LinkedHashMap")
-                || qualifiedName.equals("java.util.WeakHashMap")
-                || qualifiedName.equals("java.util.IdentityHashMap")
-                || qualifiedName.equals("java.util.Hashtable")
-                || qualifiedName.equals("java.util.Properties")
-                || qualifiedName.equals("java.util.concurrent.ConcurrentHashMap")
-                || qualifiedName.equals("java.util.concurrent.ConcurrentSkipListMap");
     }
 
     /**

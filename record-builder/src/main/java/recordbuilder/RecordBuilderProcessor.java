@@ -1,6 +1,5 @@
 package recordbuilder;
 
-import com.palantir.javapoet.AnnotationSpec;
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.CodeBlock;
 import com.palantir.javapoet.FieldSpec;
@@ -24,9 +23,7 @@ import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.RecordComponentElement;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 
 /**
@@ -39,7 +36,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     private Filer filer;
     private Messager messager;
     private Elements elementUtils;
-    private Types typeUtils;
     private TypeAnalyzer typeAnalyzer;
     private TypeNameBuilder typeNameBuilder;
 
@@ -59,8 +55,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         this.filer = processingEnv.getFiler();
         this.messager = processingEnv.getMessager();
         this.elementUtils = processingEnv.getElementUtils();
-        this.typeUtils = processingEnv.getTypeUtils();
-        this.typeAnalyzer = new TypeAnalyzer(elementUtils, typeUtils);
+        this.typeAnalyzer = new TypeAnalyzer();
         this.typeNameBuilder = new TypeNameBuilder(elementUtils, typeAnalyzer);
     }
 
@@ -101,16 +96,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         for (RecordComponentElement component : components) {
             String fieldName = component.getSimpleName().toString();
             TypeName fieldType = typeNameBuilder.getFieldType(component);
-
-            // Add @Nullable annotation for all non-primitive fields in builder
-            // (Builder fields can be null during construction, even if record field is non-null)
-            if (!typeAnalyzer.isPrimitive(component) && !typeAnalyzer.isNullable(component)) {
-                // For non-nullable fields in the record, add @Nullable as a type annotation to the builder field
-                // Use annotated() to ensure correct placement for qualified types (e.g., Outer.@Nullable Inner)
-                ClassName nullableAnnotation = ClassName.get("org.jspecify.annotations", "Nullable");
-                fieldType = fieldType.annotated(
-                        AnnotationSpec.builder(nullableAnnotation).build());
-            }
 
             FieldSpec.Builder fieldBuilder = FieldSpec.builder(fieldType, fieldName, Modifier.PRIVATE);
             builderClassBuilder.addField(fieldBuilder.build());
@@ -276,61 +261,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addModifiers(Modifier.PUBLIC)
                 .returns(fieldType);
 
-        if (typeAnalyzer.isCollection(component)) {
-            TypeMirror type = component.asType();
-            boolean isConcrete = typeAnalyzer.isConcreteCollectionType(type);
-
-            if (isConcrete) {
-                // Concrete collection types: return directly without wrapping
-                if (typeAnalyzer.isNullable(component)) {
-                    methodBuilder.addStatement("return this.$L", fieldName);
-                } else {
-                    methodBuilder.addStatement(
-                            "return $T.requireNonNull(this.$L, \"$L has not been set a value yet\")",
-                            Objects.class,
-                            fieldName,
-                            fieldName);
-                }
-            } else {
-                // Interface collection types: return directly
-                if (typeAnalyzer.isNullable(component)) {
-                    methodBuilder.addStatement("return this.$L", fieldName);
-                } else {
-                    methodBuilder.addStatement(
-                            "return $T.requireNonNull(this.$L, \"$L has not been set a value yet\")",
-                            Objects.class,
-                            fieldName,
-                            fieldName);
-                }
-            }
-        } else if (typeAnalyzer.isMap(component)) {
-            TypeMirror type = component.asType();
-            boolean isConcrete = typeAnalyzer.isConcreteMapType(type);
-
-            if (isConcrete) {
-                // Concrete map types: return directly without wrapping
-                if (typeAnalyzer.isNullable(component)) {
-                    methodBuilder.addStatement("return this.$L", fieldName);
-                } else {
-                    methodBuilder.addStatement(
-                            "return $T.requireNonNull(this.$L, \"$L has not been set a value yet\")",
-                            Objects.class,
-                            fieldName,
-                            fieldName);
-                }
-            } else {
-                // Interface map types: return directly
-                if (typeAnalyzer.isNullable(component)) {
-                    methodBuilder.addStatement("return this.$L", fieldName);
-                } else {
-                    methodBuilder.addStatement(
-                            "return $T.requireNonNull(this.$L, \"$L has not been set a value yet\")",
-                            Objects.class,
-                            fieldName,
-                            fieldName);
-                }
-            }
-        } else if (typeAnalyzer.isPrimitive(component) || typeAnalyzer.isNullable(component)) {
+        if (typeAnalyzer.isPrimitive(component) || typeAnalyzer.isNullable(component)) {
             methodBuilder.addStatement("return this.$L", fieldName);
         } else {
             methodBuilder.addStatement(
@@ -374,32 +305,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
             returnStatement.add("\n");
 
-            // For collections, create defensive copies to prevent modifications
-            if (typeAnalyzer.isCollection(component)) {
-                TypeMirror type = component.asType();
-                boolean isConcrete = typeAnalyzer.isConcreteCollectionType(type);
-
-                if (isConcrete) {
-                    // Concrete collection types: pass directly without wrapping
-                    returnStatement.add("this.$L", fieldName);
-                } else {
-                    // Interface collection types: pass directly without wrapping
-                    returnStatement.add("this.$L", fieldName);
-                }
-            } else if (typeAnalyzer.isMap(component)) {
-                TypeMirror type = component.asType();
-                boolean isConcrete = typeAnalyzer.isConcreteMapType(type);
-
-                if (isConcrete) {
-                    // Concrete map types: pass directly without wrapping
-                    returnStatement.add("this.$L", fieldName);
-                } else {
-                    // Interface map types: pass directly without wrapping
-                    returnStatement.add("this.$L", fieldName);
-                }
-            } else {
-                returnStatement.add("this.$L", fieldName);
-            }
+            returnStatement.add("this.$L", fieldName);
         }
 
         returnStatement.add(")");

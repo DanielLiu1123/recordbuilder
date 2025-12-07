@@ -5,7 +5,6 @@ import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.ParameterizedTypeName;
 import com.palantir.javapoet.TypeName;
 import java.util.List;
-import java.util.Map;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.RecordComponentElement;
 import javax.lang.model.element.TypeElement;
@@ -37,75 +36,8 @@ final class TypeNameBuilder {
     TypeName getFieldType(RecordComponentElement component) {
         TypeMirror type = component.asType();
 
-        if (typeAnalyzer.isCollection(component)) {
-            return buildCollectionFieldType(component);
-        } else if (typeAnalyzer.isMap(component)) {
-            return buildMapFieldType(component);
-        }
-
         // For non-collection and non-map types, use getTypeNameWithAnnotations
         return getTypeNameWithAnnotations(type);
-    }
-
-    /**
-     * Builds TypeName for collection fields.
-     */
-    private TypeName buildCollectionFieldType(RecordComponentElement component) {
-        TypeMirror type = component.asType();
-
-        TypeMirror elementType = getTypeArgument(type, 0);
-        TypeName elementTypeName = getTypeNameWithAnnotations(elementType);
-
-        TypeName result;
-        if (typeAnalyzer.isConcreteCollectionType(type)) {
-            // Preserve concrete type (ArrayList, HashSet, etc.)
-            TypeElement typeElement = (TypeElement) ((DeclaredType) type).asElement();
-            ClassName concreteClass = ClassName.get(typeElement);
-            result = ParameterizedTypeName.get(concreteClass, elementTypeName);
-        } else {
-            // Use interface type (List, Set, Collection)
-            ClassName interfaceClass = CollectionHelper.getCollectionInterfaceClass(type);
-            result = ParameterizedTypeName.get(interfaceClass, elementTypeName);
-        }
-
-        // Preserve @Nullable annotation on the collection itself if present
-        if (typeAnalyzer.isNullable(component)) {
-            ClassName nullableAnnotation = getNullableAnnotation(component);
-            result = result.annotated(AnnotationSpec.builder(nullableAnnotation).build());
-        }
-
-        return result;
-    }
-
-    /**
-     * Builds TypeName for map fields.
-     */
-    private TypeName buildMapFieldType(RecordComponentElement component) {
-        TypeMirror type = component.asType();
-
-        TypeMirror keyType = getTypeArgument(type, 0);
-        TypeMirror valueType = getTypeArgument(type, 1);
-        TypeName keyTypeName = getTypeNameWithAnnotations(keyType);
-        TypeName valueTypeName = getTypeNameWithAnnotations(valueType);
-
-        TypeName result;
-        if (typeAnalyzer.isConcreteMapType(type)) {
-            // Preserve concrete type (HashMap, TreeMap, etc.)
-            TypeElement typeElement = (TypeElement) ((DeclaredType) type).asElement();
-            ClassName concreteClass = ClassName.get(typeElement);
-            result = ParameterizedTypeName.get(concreteClass, keyTypeName, valueTypeName);
-        } else {
-            // Use interface type (Map)
-            result = ParameterizedTypeName.get(ClassName.get(Map.class), keyTypeName, valueTypeName);
-        }
-
-        // Preserve @Nullable annotation on the map itself if present
-        if (typeAnalyzer.isNullable(component)) {
-            ClassName nullableAnnotation = getNullableAnnotation(component);
-            result = result.annotated(AnnotationSpec.builder(nullableAnnotation).build());
-        }
-
-        return result;
     }
 
     /**
@@ -145,29 +77,6 @@ final class TypeNameBuilder {
     }
 
     /**
-     * Gets the nullable annotation from a record component.
-     * Checks both element and type annotations.
-     */
-    ClassName getNullableAnnotation(RecordComponentElement component) {
-        // Check element annotations
-        for (AnnotationMirror annotation : component.getAnnotationMirrors()) {
-            if (typeAnalyzer.isNullableAnnotation(annotation)) {
-                return createClassName(annotation);
-            }
-        }
-
-        // Check type annotations
-        for (AnnotationMirror annotation : component.asType().getAnnotationMirrors()) {
-            if (typeAnalyzer.isNullableAnnotation(annotation)) {
-                return createClassName(annotation);
-            }
-        }
-
-        // Default fallback
-        return ClassName.get("org.jspecify.annotations", "Nullable");
-    }
-
-    /**
      * Gets the nullable annotation from a type.
      */
     ClassName getNullableAnnotationFromType(TypeMirror type) {
@@ -191,19 +100,5 @@ final class TypeNameBuilder {
                 elementUtils.getPackageOf(annotationType).getQualifiedName().toString();
         String simpleName = annotationType.getSimpleName().toString();
         return ClassName.get(packageName, simpleName);
-    }
-
-    /**
-     * Gets the type argument at the specified index from a parameterized type.
-     */
-    TypeMirror getTypeArgument(TypeMirror type, int index) {
-        if (type.getKind() == TypeKind.DECLARED) {
-            DeclaredType declaredType = (DeclaredType) type;
-            List<? extends TypeMirror> typeArguments = declaredType.getTypeArguments();
-            if (typeArguments.size() > index) {
-                return typeArguments.get(index);
-            }
-        }
-        return elementUtils.getTypeElement("java.lang.Object").asType();
     }
 }
