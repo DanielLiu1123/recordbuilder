@@ -81,7 +81,7 @@ public class DeployTask extends DefaultTask {
 
         System.out.println("Deploy bundle: " + zipFile.getName());
 
-//        doDeployRelease(releaseConfig, zipFile);
+        doDeployRelease(releaseConfig, zipFile);
     }
 
     private static void doDeployRelease(DeployerPluginExtension.ReleaseConfig releaseConfig, File zipFile) throws Exception {
@@ -91,7 +91,7 @@ public class DeployTask extends DefaultTask {
         // multipart body: headers + file bytes + end boundary
         String partHeaders =
                 "--" + boundary + "\r\n" +
-                "Content-Disposition: form-data; name=\"bundle\"; filename=\"" + zipFile.getName() + "\"\r\n" +
+                "Content-Disposition: form-data; name=bundle; filename=" + zipFile.getName() + "\r\n" +
                 "Content-Type: application/octet-stream\r\n\r\n";
 
         byte[] fileBytes = Files.readAllBytes(zipFile.toPath());
@@ -111,9 +111,9 @@ public class DeployTask extends DefaultTask {
         var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
         System.out.println("Response: ");
-        System.out.println("status: " + response.statusCode());
-        System.out.println("body: " + response.body());
-        System.out.println("headers: " + response.headers().map());
+        System.out.println("  status: " + response.statusCode());
+        System.out.println("  body: " + response.body());
+        System.out.println("  headers: " + response.headers().map());
     }
 
     private static String getAuth(String username, String password) {
