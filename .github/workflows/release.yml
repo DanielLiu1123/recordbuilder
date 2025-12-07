@@ -43,4 +43,5 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           tag=${{ github.ref_name }}
-          ./gradlew publish jreleaserDeploy --no-daemon --stacktrace -Pversion=${tag#v}
+          ./gradlew clean publish --no-daemon -Pversion=${tag#v}
+          ./gradlew deploy --no-daemon -Pversion=${tag#v}
