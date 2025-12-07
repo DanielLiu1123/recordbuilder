@@ -23,6 +23,66 @@ import org.junit.jupiter.api.Test;
 
 class RecordBuilderProcessorTest {
 
+    @Test
+    void shouldFailWhenAnnotationIsNotUsedOnClass() {
+        JavaFileObject source = JavaFileObjects.forSourceString("test.NotARecord", """
+                package test;
+
+                import recordbuilder.RecordBuilder;
+
+                @RecordBuilder
+                public class NotARecord {
+                    private String field;
+                }
+                """);
+
+        Compilation compilation =
+                Compiler.javac().withProcessors(new RecordBuilderProcessor()).compile(source);
+
+        CompilationSubject.assertThat(compilation).failed();
+        CompilationSubject.assertThat(compilation).hadErrorContaining("@RecordBuilder can only be applied to records");
+    }
+
+    @Test
+    void shouldFailWhenAnnotationIsUsedOnInterface() {
+        JavaFileObject source = JavaFileObjects.forSourceString("test.NotARecord", """
+                package test;
+
+                import recordbuilder.RecordBuilder;
+
+                @RecordBuilder
+                public interface NotARecord {
+                    String field();
+                }
+                """);
+
+        Compilation compilation =
+                Compiler.javac().withProcessors(new RecordBuilderProcessor()).compile(source);
+
+        CompilationSubject.assertThat(compilation).failed();
+        CompilationSubject.assertThat(compilation).hadErrorContaining("@RecordBuilder can only be applied to records");
+    }
+
+    @Test
+    void shouldFailWhenAnnotationIsUsedOnEnum() {
+        JavaFileObject source = JavaFileObjects.forSourceString("test.NotARecord", """
+                package test;
+
+                import recordbuilder.RecordBuilder;
+
+                @RecordBuilder
+                public enum NotARecord {
+                    VALUE1, VALUE2
+                }
+                """);
+
+        Compilation compilation =
+                Compiler.javac().withProcessors(new RecordBuilderProcessor()).compile(source);
+
+        CompilationSubject.assertThat(compilation).failed();
+        CompilationSubject.assertThat(compilation).hadErrorContaining("@RecordBuilder can only be applied to records");
+    }
+
     /**
      * For debugging the annotation processor.
      */
