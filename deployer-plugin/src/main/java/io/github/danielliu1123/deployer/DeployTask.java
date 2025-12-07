@@ -32,59 +32,45 @@ public class DeployTask extends DefaultTask {
 
     private final DeployerPluginExtension extension;
     private final String version;
+    private final boolean isSnapshot;
     private final File projectDir;
 
     @Inject
     public DeployTask(Project project, DeployerPluginExtension extension) {
         this.extension = extension;
         this.version = project.getVersion().toString();
+        this.isSnapshot = version.endsWith("-SNAPSHOT");
         this.projectDir = project.getProjectDir();
     }
 
     @TaskAction
     public void run() throws Exception {
-        var isSnapshot = version.endsWith("-SNAPSHOT");
-
         System.out.println("Deploying version: " + version + " (isSnapshot=" + isSnapshot + ")");
 
-        if (isSnapshot) {
-            deploySnapshot(extension.getSnapshot());
-        } else {
-            deployRelease(extension.getRelease());
-        }
+        deploy();
     }
 
-    private void deploySnapshot(DeployerPluginExtension.SnapshotConfig snapshotConfig) throws Exception {
-        var dirPath = snapshotConfig.getDir().getAsFile().get().toPath();
-
-        // package artifacts into a zip file
-        var bundleName = "%s-%s.zip".formatted(projectDir.getName(), version);
-        var bundlePath = Path.of(projectDir.getAbsolutePath(), bundleName);
-        File zipFile = zipArtifacts(dirPath, bundlePath);
-
-    }
-
-    private void deployRelease(DeployerPluginExtension.ReleaseConfig releaseConfig) throws Exception {
-        Path dirPath = releaseConfig.getDir().getAsFile().get().toPath();
+    private void deploy() throws Exception {
+        Path dirPath = extension.getDir().getAsFile().get().toPath();
 
         // Use gpg to sign all files
         try {
-            GpgSigner.signDirectory(dirPath, releaseConfig.getSign().getSecretKey().get(), releaseConfig.getSign().getPassphrase().get());
+            GpgSigner.signDirectory(dirPath, extension.getSign().getSecretKey().get(), extension.getSign().getPassphrase().get());
         } catch (Exception e) {
             throw new RuntimeException("Failed to sign artifacts in directory: " + dirPath, e);
         }
 
         // package artifacts into a zip file
-        var bundleName = "%s-%s.zip".formatted(projectDir.getName(), version);
+        var bundleName = "%s-%s-bundle.zip".formatted(projectDir.getName(), version);
         var bundlePath = Path.of(projectDir.getAbsolutePath(), bundleName);
         File zipFile = zipArtifacts(dirPath, bundlePath);
 
         System.out.println("Deploy bundle: " + zipFile.getName());
 
-        doDeployRelease(releaseConfig, zipFile);
+        doDeploy(zipFile);
     }
 
-    private static void doDeployRelease(DeployerPluginExtension.ReleaseConfig releaseConfig, File zipFile) throws Exception {
+    private void doDeploy(File zipFile) throws Exception {
         // random boundary
         String boundary = "----JavaBoundary" + UUID.randomUUID();
 
@@ -100,9 +86,15 @@ public class DeployTask extends DefaultTask {
 
         byte[] bodyBytes = createMultipartBody(partHeaders, fileBytes, endBoundary);
 
+        var url = isSnapshot
+                ? "https://central.sonatype.com/repository/maven-snapshots"
+                : "https://central.sonatype.com/api/v1/publisher/upload?publishingType=%s".formatted(getPublishingType().name());
+
+        System.out.println("Deploying to URL: " + url);
+
         var request = HttpRequest.newBuilder()
-                .uri(URI.create("https://central.sonatype.com/api/v1/publisher/upload"))
-                .header("Authorization", "Bearer " + getAuth(releaseConfig.getUsername().get(), releaseConfig.getPassword().get()))
+                .uri(URI.create(url))
+                .header("Authorization", "Bearer " + getAuth())
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
                 .build();
@@ -116,12 +108,18 @@ public class DeployTask extends DefaultTask {
         System.out.println("  headers: " + response.headers().map());
     }
 
-    private static String getAuth(String username, String password) {
+    private PublishingType getPublishingType() {
+        return extension.getPublishingType().get();
+    }
+
+    private String getAuth() {
+        var username = extension.getUsername().get();
+        var password = extension.getPassword().get();
         var credentials = "%s:%s".formatted(username, password);
         return Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
     }
 
-    private static File zipArtifacts(Path path, Path zipFilePath) throws IOException {
+    private static File zipArtifacts(Path path, Path zipFilePath) {
         if (!Files.isDirectory(path)) {
             throw new IllegalArgumentException("The provided path is not a directory: " + path);
         }

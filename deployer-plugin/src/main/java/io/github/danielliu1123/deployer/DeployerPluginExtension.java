@@ -3,10 +3,8 @@ package io.github.danielliu1123.deployer;
 import org.gradle.api.Action;
 import org.gradle.api.Project;
 import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Property;
-
-import javax.inject.Inject;
-import java.io.File;
 
 /**
  *
@@ -14,83 +12,50 @@ import java.io.File;
  */
 public abstract class DeployerPluginExtension {
 
-    private final ReleaseConfig release;
-    private final SnapshotConfig snapshot;
+    private final DirectoryProperty dir;
+    private final Property<String> username;
+    private final Property<String> password;
+    private final Property<PublishingType> publishingType;
+    private final Sign sign;
 
     public DeployerPluginExtension(Project project) {
-        var objects = project.getObjects();
-        this.release = objects.newInstance(ReleaseConfig.class, project);
-        this.snapshot = objects.newInstance(SnapshotConfig.class);
+        ObjectFactory objects = project.getObjects();
+        this.dir = objects.directoryProperty();
+        this.username = objects.property(String.class);
+        this.password = objects.property(String.class);
+        this.publishingType = objects.property(PublishingType.class).convention(PublishingType.USER_MANAGED);
+        this.sign = objects.newInstance(Sign.class);
     }
 
-    public ReleaseConfig getRelease() {
-        return release;
+    public DirectoryProperty getDir() {
+        return dir;
     }
 
-    public void release(Action<? super ReleaseConfig> action) {
-        action.execute(release);
+    public Property<String> getUsername() {
+        return username;
     }
 
-    public SnapshotConfig getSnapshot() {
-        return snapshot;
+    public Property<String> getPassword() {
+        return password;
     }
 
-    public void snapshot(Action<? super SnapshotConfig> action) {
-        action.execute(snapshot);
+    public Property<PublishingType> getPublishingType() {
+        return publishingType;
     }
 
-    // ------------------------------------------------------------------------
-    // Inner config classes
-    // ------------------------------------------------------------------------
-
-    /**
-     * release { ... }
-     */
-    public static abstract class ReleaseConfig {
-
-        public abstract DirectoryProperty getDir();
-
-        public abstract Property<String> getUsername();
-
-        public abstract Property<String> getPassword();
-
-        private final SignConfig sign;
-
-        @Inject
-        public ReleaseConfig(Project project) {
-            var objects = project.getObjects();
-            this.sign = objects.newInstance(SignConfig.class);
-        }
-
-        public SignConfig getSign() {
-            return sign;
-        }
-
-        public void sign(Action<? super SignConfig> action) {
-            action.execute(sign);
-        }
+    public Sign getSign() {
+        return sign;
     }
 
-    /**
-     * snapshot { ... }
-     */
-    public static abstract class SnapshotConfig {
-
-        public abstract DirectoryProperty getDir();
-
-        public abstract Property<String> getUsername();
-
-        public abstract Property<String> getPassword();
+    public void sign(Action<? super Sign> action) {
+        action.execute(sign);
     }
 
     /**
      * sign { ... }
      */
-    public static abstract class SignConfig {
-
+    public static abstract class Sign {
         public abstract Property<String> getSecretKey();
-
-        public abstract Property<String> getPublicKey();
 
         public abstract Property<String> getPassphrase();
     }

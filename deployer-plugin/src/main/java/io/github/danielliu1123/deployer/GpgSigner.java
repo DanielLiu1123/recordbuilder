@@ -7,7 +7,7 @@ import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 
-public class GpgSigner {
+final class GpgSigner {
 
     public static void signDirectory(Path dir, String armoredPrivateKey, String passphrase) throws Exception {
         if (!Files.isDirectory(dir)) {
@@ -43,6 +43,7 @@ public class GpgSigner {
                                  || e.toString().endsWith(".pom")
                                  || e.toString().endsWith(".xml")
                                  || e.toString().endsWith(".module")
+                                 || e.toString().endsWith(".json")
                     )
                     .forEach(file -> {
                         try {
