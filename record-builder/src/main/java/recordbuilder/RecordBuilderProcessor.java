@@ -11,11 +11,13 @@ import com.palantir.javapoet.ParameterizedTypeName;
 import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
 import java.io.IOException;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
+import javax.annotation.processing.Generated;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -93,8 +95,12 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         List<? extends RecordComponentElement> components = recordElement.getRecordComponents();
 
-        TypeSpec.Builder builderClassBuilder =
-                TypeSpec.classBuilder(builderName).addModifiers(Modifier.PUBLIC, Modifier.FINAL);
+        TypeSpec.Builder builderClassBuilder = TypeSpec.classBuilder(builderName)
+                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                .addAnnotation(AnnotationSpec.builder(Generated.class)
+                        .addMember("value", "$S", RecordBuilderProcessor.class.getCanonicalName())
+                        .addMember("date", "$S", OffsetDateTime.now().toString())
+                        .build());
 
         // Add fields
         for (RecordComponentElement component : components) {
