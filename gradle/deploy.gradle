@@ -74,13 +74,9 @@ publishing {
 
     repositories {
         maven {
-            url = "${rootDir}/build/staging-deploy"
+            url = layout.buildDirectory.dir("repo")
         }
     }
-}
-
-clean {
-    delete "${rootDir}/build/staging-deploy"
 }
 
 def getDependencies(String configurationName) {

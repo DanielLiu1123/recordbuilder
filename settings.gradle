@@ -1,5 +1,5 @@
 pluginManagement {
-    includeBuild("./deployer-plugin")
+    includeBuild("../maven-deployer")
 }
 
 rootProject.name = "record-builder-root"
