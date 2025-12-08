@@ -1,4 +1,6 @@
+apply plugin: "java-library"
 apply plugin: "maven-publish"
+apply plugin: "signing"
 
 java {
     withSourcesJar()
@@ -84,6 +86,18 @@ publishing {
                 url = layout.buildDirectory.dir("repo")
             }
         }
+    }
+}
+
+signing {
+    if (!version.toString().endsWith('-SNAPSHOT')) {
+        def signingKey = System.getenv("GPG_SECRET_KEY")
+        def signingPassphrase = System.getenv("GPG_PASSPHRASE")
+        if (signingKey == null || signingPassphrase == null) {
+            throw new GradleException("Need to set GPG_SECRET_KEY and GPG_PASSPHRASE environment variables for signing.")
+        }
+        useInMemoryPgpKeys(signingKey, signingPassphrase)
+        sign publishing.publications.maven
     }
 }
 
