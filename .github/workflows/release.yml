@@ -32,16 +32,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
 
       - name: Build
-        run: ./gradlew build --no-daemon --stacktrace
+        run: ./gradlew build --no-daemon
 
       - name: Release
         env:
           MAVENCENTRAL_USERNAME: ${{ secrets.MAVENCENTRAL_USERNAME }}
           MAVENCENTRAL_PASSWORD: ${{ secrets.MAVENCENTRAL_PASSWORD }}
-          GPG_PUBLIC_KEY: ${{ secrets.GPG_PUBLIC_KEY }}
           GPG_SECRET_KEY: ${{ secrets.GPG_SECRET_KEY }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           tag=${{ github.ref_name }}
           ./gradlew clean publish --no-daemon -Pversion=${tag#v}
-          ./gradlew deploy --no-daemon -Pversion=${tag#v}
+          ./gradlew deploy --no-daemon
