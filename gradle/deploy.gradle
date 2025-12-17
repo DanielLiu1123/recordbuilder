@@ -14,7 +14,7 @@ def githubUrl = providers.exec {
 
 publishing {
     publications {
-        maven(MavenPublication) {
+        register("maven", MavenPublication) {
             from components.java
 
             // see https://docs.gradle.org/current/userguide/publishing_maven.html
