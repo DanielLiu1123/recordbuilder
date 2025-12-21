@@ -109,8 +109,16 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         List<? extends RecordComponentElement> components = recordElement.getRecordComponents();
 
-        TypeSpec.Builder builderClassBuilder = TypeSpec.classBuilder(builderName)
-                .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+        TypeSpec.Builder builderClassBuilder = TypeSpec.classBuilder(builderName);
+
+        // Set the same visibility as the record
+        recordElement.getModifiers().stream()
+                .filter(m -> m == Modifier.PUBLIC || m == Modifier.PROTECTED || m == Modifier.PRIVATE)
+                .findFirst()
+                .ifPresent(builderClassBuilder::addModifiers);
+
+        builderClassBuilder
+                .addModifiers(Modifier.FINAL)
                 .addAnnotation(AnnotationSpec.builder(Generated.class)
                         .addMember("value", "$S", RecordBuilderProcessor.class.getCanonicalName())
                         .addMember("date", "$S", OffsetDateTime.now().toString())
