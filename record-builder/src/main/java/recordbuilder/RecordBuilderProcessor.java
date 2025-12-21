@@ -554,6 +554,9 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             if (!first) {
                 hashCodeBlock.add(", ");
             }
+
+            hashCodeBlock.add("\n");
+
             String fieldName = "_" + component.getSimpleName();
             hashCodeBlock.add("this.$L", fieldName);
             first = false;
@@ -565,9 +568,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             if (!first) {
                 hashCodeBlock.add(", ");
             }
+            hashCodeBlock.add("\n");
             hashCodeBlock.add("this." + PRESENCE_MASK_FIELD);
         } else {
             hashCodeBlock.add(", ");
+            hashCodeBlock.add("\n");
             hashCodeBlock.add("$T.hashCode(this." + PRESENCE_MASK_FIELD + ")", Arrays.class);
         }
 
