@@ -37,43 +37,74 @@ import org.jspecify.annotations.Nullable;
 @RecordBuilder
 public record User(
     String name,
-    int age,
-    @Nullable String email // respect jspecify `@Nullable`
+    Integer age,
+    @Nullable String email
 ) {}
 ```
 
-After compilation, a `UserBuilder` class will be generated:
+### Generated Code
+
+After compilation, a `UserBuilder` class will be generated with the following structure:
 
 ```java
-// Create builder and build object
-User user = UserBuilder.builder()
-    .setName("Alice")           // Non-null fields have null checks
-    .setAge(18)
-    .setEmail("alice@example.com")
-    .build();
+import org.jspecify.annotations.Nullable;
 
-// Create builder from existing record
-UserBuilder builder = UserBuilder.builder(user);
+@Generated(
+    value = "recordbuilder.RecordBuilderProcessor",
+    date = "..."
+)
+public final class UserBuilder {
+    private String _name;
+    private Integer _age;
+    private @Nullable String _email;
 
-// Getter methods
-String name = builder.getName();
-String email = builder.getEmail();
+    private UserBuilder() {}
 
-// Has methods (check if field is set)
-boolean hasName = builder.hasName();    // Returns true even if set to default value
-boolean hasEmail = builder.hasEmail();  // Returns false if not set
+    // Factory methods
+    public static UserBuilder builder() { ... }
+    public static UserBuilder builder(User source) { ... }
 
-// Clear methods
-builder.clearName();   // Clear field value, has method will return false
-builder.clearEmail();
+    // Merge method
+    public UserBuilder merge(User source) { ... }
 
-// Merge method
-var anotherUser = UserBuilder.builder()
-    .setName("Bob")
-    .setAge(25)
-    .build();
-builder.merge(anotherUser); // Merge values from existing record
+    // Setter methods (fluent API)
+    public UserBuilder setName(String name) { ... }
+    public UserBuilder setAge(Integer age) { ... }
+    public UserBuilder setEmail(@Nullable String email) { ... }
+
+    // Has methods (check if field was set)
+    public boolean hasName() { ... }
+    public boolean hasAge() { ... }
+    public boolean hasEmail() { ... }
+
+    // Getter methods
+    public String getName() { ... }
+    public Integer getAge() { ... }
+    public @Nullable String getEmail() { ... }
+
+    // Clear methods
+    public UserBuilder clearName() { ... }
+    public UserBuilder clearAge() { ... }
+    public UserBuilder clearEmail() { ... }
+
+    // Build method
+    public User build() { ... }
+
+    // toString
+    @Override
+    public String toString() { ... }
+}
 ```
+
+The generated builder includes:
+- **Factory methods**: `builder()` to create new builder, `builder(source)` to copy from existing record
+- **Merge method**: `merge(source)` to copy from existing record
+- **Setter methods**: `setXxx()` with fluent API, non-null fields have null validation
+- **Getter methods**: `getXxx()` to access current field values
+- **Has methods**: `hasXxx()` to check if field was explicitly set (returns true even for default values)
+- **Clear methods**: `clearXxx()` to reset field and mark as unset
+- **Build method**: `build()` to construct the final record
+- **toString**: Only shows fields that were explicitly set
 
 ## License
 

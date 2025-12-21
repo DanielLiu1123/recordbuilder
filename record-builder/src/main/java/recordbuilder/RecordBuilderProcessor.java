@@ -12,7 +12,6 @@ import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
 import java.io.IOException;
 import java.time.OffsetDateTime;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -180,12 +179,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         // Add build() method
         builderClassBuilder.addMethod(generateBuildMethod(recordClassName, components));
-
-        // Add equals() method
-        builderClassBuilder.addMethod(generateEqualsMethod(builderClassName, components));
-
-        // Add hashCode() method
-        builderClassBuilder.addMethod(generateHashCodeMethod(components));
 
         // Add toString() method
         builderClassBuilder.addMethod(generateToStringMethod(builderName, components));
@@ -498,88 +491,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             int bitOffset = bitIndex % 64;
             return CodeBlock.of("this." + PRESENCE_MASK_FIELD + "[$L] &= ~$L", arrayIndex, "(1L << " + bitOffset + ")");
         }
-    }
-
-    private MethodSpec generateEqualsMethod(
-            ClassName builderClassName, List<? extends RecordComponentElement> components) {
-        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("equals")
-                .addModifiers(Modifier.PUBLIC)
-                .addAnnotation(Override.class)
-                .returns(boolean.class)
-                .addParameter(Object.class, "obj");
-
-        methodBuilder.addStatement("if (this == obj) return true");
-        methodBuilder.addStatement("if (obj == null || getClass() != obj.getClass()) return false");
-        methodBuilder.addStatement("$T that = ($T) obj", builderClassName, builderClassName);
-
-        // Compare all fields
-        for (RecordComponentElement component : components) {
-            String fieldName = "_" + component.getSimpleName();
-            if (isPrimitive(component)) {
-                methodBuilder.addStatement("if (this.$L != that.$L) return false", fieldName, fieldName);
-            } else {
-                methodBuilder.addStatement(
-                        "if (!$T.equals(this.$L, that.$L)) return false", Objects.class, fieldName, fieldName);
-            }
-        }
-
-        // Compare presence mask
-        int fieldCount = components.size();
-        if (fieldCount <= 64) {
-            methodBuilder.addStatement(
-                    "if (this." + PRESENCE_MASK_FIELD + " != that." + PRESENCE_MASK_FIELD + ") return false");
-        } else {
-            methodBuilder.addStatement(
-                    "if (!$T.equals(this." + PRESENCE_MASK_FIELD + ", that." + PRESENCE_MASK_FIELD + ")) return false",
-                    Arrays.class);
-        }
-
-        methodBuilder.addStatement("return true");
-
-        return methodBuilder.build();
-    }
-
-    private MethodSpec generateHashCodeMethod(List<? extends RecordComponentElement> components) {
-        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("hashCode")
-                .addModifiers(Modifier.PUBLIC)
-                .addAnnotation(Override.class)
-                .returns(int.class);
-
-        // Build the hash code calculation
-        CodeBlock.Builder hashCodeBlock = CodeBlock.builder();
-        hashCodeBlock.add("return $T.hash(", Objects.class);
-
-        boolean first = true;
-        for (RecordComponentElement component : components) {
-            if (!first) {
-                hashCodeBlock.add(", ");
-            }
-
-            hashCodeBlock.add("\n");
-
-            String fieldName = "_" + component.getSimpleName();
-            hashCodeBlock.add("this.$L", fieldName);
-            first = false;
-        }
-
-        // Add presence mask to hash
-        int fieldCount = components.size();
-        if (fieldCount <= 64) {
-            if (!first) {
-                hashCodeBlock.add(", ");
-            }
-            hashCodeBlock.add("\n");
-            hashCodeBlock.add("this." + PRESENCE_MASK_FIELD);
-        } else {
-            hashCodeBlock.add(", ");
-            hashCodeBlock.add("\n");
-            hashCodeBlock.add("$T.hashCode(this." + PRESENCE_MASK_FIELD + ")", Arrays.class);
-        }
-
-        hashCodeBlock.add(")");
-        methodBuilder.addStatement(hashCodeBlock.build());
-
-        return methodBuilder.build();
     }
 
     private MethodSpec generateToStringMethod(String builderName, List<? extends RecordComponentElement> components) {
