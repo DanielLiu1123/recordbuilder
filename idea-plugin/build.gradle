@@ -1,0 +1,46 @@
+plugins {
+    id "java"
+    id "org.jetbrains.intellij.platform" version "2.10.5"
+}
+
+group = "recordbuilder"
+version = "1.0.0"
+
+repositories {
+    mavenCentral()
+    intellijPlatform {
+        defaultRepositories()
+    }
+}
+
+dependencies {
+    compileOnly project(":record-builder")
+    
+    intellijPlatform {
+        intellijIdeaCommunity("2023.2.5")
+        bundledPlugin("com.intellij.java")
+        instrumentationTools()
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+intellijPlatform {
+    buildSearchableOptions = false
+    
+    pluginConfiguration {
+        ideaVersion {
+            sinceBuild = "232"
+            untilBuild = "243.*"
+        }
+    }
+}
+
+// Disable spotless and spotbugs for IDEA plugin module
+afterEvaluate {
+    tasks.findByName('spotlessJava')?.enabled = false
+    tasks.findByName('spotbugsMain')?.enabled = false
+}

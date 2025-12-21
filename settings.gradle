@@ -1,5 +1,6 @@
 rootProject.name = "record-builder-root"
 
+include(":idea-plugin")
 include(":record-builder")
 
 // Auto install git hooks

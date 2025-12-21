@@ -1,0 +1,32 @@
+<idea-plugin>
+    <id>recordbuilder.idea-plugin</id>
+    <name>RecordBuilder Support</name>
+    <vendor>RecordBuilder</vendor>
+
+    <description><![CDATA[
+        Provides IDE support for RecordBuilder annotation processor.
+
+        Features:
+        - Code completion for generated Builder classes without compilation
+        - Support for builder() factory methods
+        - Support for all builder methods (setXxx, getXxx, hasXxx, clearXxx, build, merge)
+        - Navigation to generated builder classes
+
+        Usage:
+        Simply annotate your record with @RecordBuilder, and the IDE will immediately
+        recognize the generated builder class and its methods without requiring compilation.
+    ]]></description>
+
+    <depends>com.intellij.modules.java</depends>
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Light class generator for Builder classes -->
+        <lightClassGeneratorExtension
+                implementation="recordbuilder.idea.RecordBuilderLightClassGenerator"/>
+
+        <!-- Augment provider for adding builder() methods to records -->
+        <psi.augmentProvider
+                implementation="recordbuilder.idea.RecordBuilderAugmentProvider"/>
+    </extensions>
+</idea-plugin>
