@@ -92,7 +92,19 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         String recordName = recordElement.getSimpleName().toString();
         String builderName = recordName + "Builder";
 
-        ClassName recordClassName = ClassName.get(packageName, recordName);
+        // Handle nested records - only the record itself may be nested, builder is always top-level
+        ClassName recordClassName;
+        Element enclosingElement = recordElement.getEnclosingElement();
+        if (enclosingElement.getKind() == ElementKind.CLASS || enclosingElement.getKind() == ElementKind.INTERFACE) {
+            // This is a nested record
+            String enclosingClassName = enclosingElement.getSimpleName().toString();
+            recordClassName = ClassName.get(packageName, enclosingClassName, recordName);
+        } else {
+            // This is a top-level record
+            recordClassName = ClassName.get(packageName, recordName);
+        }
+
+        // Builder is always a top-level class
         ClassName builderClassName = ClassName.get(packageName, builderName);
 
         List<? extends RecordComponentElement> components = recordElement.getRecordComponents();
