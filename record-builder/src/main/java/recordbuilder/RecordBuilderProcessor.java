@@ -107,7 +107,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             String fieldName = component.getSimpleName().toString();
             TypeName fieldType = getTypeNameWithAnnotations(component.asType());
 
-            FieldSpec.Builder fieldBuilder = FieldSpec.builder(fieldType, fieldName, Modifier.PRIVATE);
+            FieldSpec.Builder fieldBuilder = FieldSpec.builder(fieldType, "_" + fieldName, Modifier.PRIVATE);
             builderClassBuilder.addField(fieldBuilder.build());
         }
 
@@ -210,7 +210,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                     "$T.requireNonNull($L, \"$L cannot be null\")", Objects.class, fieldName, fieldName);
         }
 
-        methodBuilder.addStatement("this.$L = $L", fieldName, fieldName);
+        methodBuilder.addStatement("this._$L = $L", fieldName, fieldName);
 
         // Mark field as set using bitmap
         methodBuilder.addStatement(generateSetBitStatement(fieldIndex, totalFields));
@@ -232,9 +232,9 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // For primitive types, set to zero value; for reference types, set to null
         if (isPrimitive(component)) {
             String zeroValue = getPrimitiveZeroValue(component);
-            methodBuilder.addStatement("this.$L = $L", fieldName, zeroValue);
+            methodBuilder.addStatement("this._$L = $L", fieldName, zeroValue);
         } else {
-            methodBuilder.addStatement("this.$L = null", fieldName);
+            methodBuilder.addStatement("this._$L = null", fieldName);
         }
 
         // Clear the bit in bitmap
@@ -253,7 +253,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addModifiers(Modifier.PUBLIC)
                 .returns(fieldType);
 
-        methodBuilder.addStatement("return this.$L", fieldName);
+        methodBuilder.addStatement("return this._$L", fieldName);
 
         return methodBuilder.build();
     }
@@ -289,7 +289,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
             returnStatement.add("\n");
 
-            returnStatement.add("this.$L", fieldName);
+            returnStatement.add("this._$L", fieldName);
         }
 
         returnStatement.add(")");
