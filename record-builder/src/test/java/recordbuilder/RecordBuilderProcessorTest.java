@@ -472,31 +472,6 @@ class RecordBuilderProcessorTest {
     }
 
     @Nested
-    class EqualsMethodTests {
-        @Test
-        void shouldBeEqualForSameFieldValues() {
-            EverythingBuilder builder1 =
-                    EverythingBuilder.builder().setInt_(100).setString("test");
-            EverythingBuilder builder2 =
-                    EverythingBuilder.builder().setInt_(100).setString("test");
-            assertThat(builder1).isNotSameAs(builder2);
-            assertThat(builder1).isEqualTo(builder2);
-        }
-    }
-
-    @Nested
-    class HashCodeMethodTests {
-        @Test
-        void shouldHaveSameHashCodeForSameFieldValues() {
-            EverythingBuilder builder1 =
-                    EverythingBuilder.builder().setInt_(100).setString("test");
-            EverythingBuilder builder2 =
-                    EverythingBuilder.builder().setInt_(100).setString("test");
-            assertThat(builder1.hashCode()).isEqualTo(builder2.hashCode());
-        }
-    }
-
-    @Nested
     class ToStringMethodTests {
         @Test
         void onlyContainsSetFields() {

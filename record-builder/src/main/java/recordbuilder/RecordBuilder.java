@@ -30,9 +30,9 @@ import java.lang.annotation.Target;
  *     date = "...",
  * )
  * public final class UserBuilder {
- *     private String name;
- *     private Integer age;
- *     private @Nullable String email;
+ *     private String _name;
+ *     private Integer _age;
+ *     private @Nullable String _email;
  *
  *     private UserBuilder() {}
  *
@@ -66,13 +66,7 @@ import java.lang.annotation.Target;
  *     // Build method
  *     public User build() { ... }
  *
- *     // equals, hashCode, toString
- *     @Override
- *     public boolean equals(Object o) { ... }
- *
- *     @Override
- *     public int hashCode() { ... }
- *
+ *     // toString
  *     @Override
  *     public String toString() { ... }
  * }
@@ -88,7 +82,7 @@ import java.lang.annotation.Target;
  *   <li>hasXxx() presence checker methods for all fields</li>
  *   <li>getXxx() getter methods for all fields</li>
  *   <li>clearXxx() clearer methods for all fields</li>
- *   <li>equals/hashCode/toString</li>
+ *   <li>toString() method</li>
  * </ul>
  *
  * <p>
