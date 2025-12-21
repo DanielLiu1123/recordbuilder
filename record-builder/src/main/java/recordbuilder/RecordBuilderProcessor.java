@@ -253,15 +253,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addModifiers(Modifier.PUBLIC)
                 .returns(fieldType);
 
-        if (isPrimitive(component) || isNullable(component)) {
-            methodBuilder.addStatement("return this.$L", fieldName);
-        } else {
-            methodBuilder.addStatement(
-                    "return $T.requireNonNull(this.$L, \"$L has not been set a value yet\")",
-                    Objects.class,
-                    fieldName,
-                    fieldName);
-        }
+        methodBuilder.addStatement("return this.$L", fieldName);
 
         return methodBuilder.build();
     }
