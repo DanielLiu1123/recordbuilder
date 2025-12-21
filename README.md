@@ -45,7 +45,7 @@ public record User(
 After compilation, a `UserBuilder` class will be generated:
 
 ```java
-User user = UserBuilder.of()
+User user = UserBuilder.builder()
     .setName("Alice")
     .setAge(18)
     .setEmail("alice@example.com")
@@ -60,14 +60,14 @@ For each record marked with `@RecordBuilder`, the following methods are generate
 
 ```java
 // Create an empty builder
-UserBuilder.of()
+UserBuilder.builder()
 
 // Create a builder from an existing record
-var user = UserBuilder.of()
+var user = UserBuilder.builder()
     .setName("Alice")
     .setAge(18)
     .build();
-UserBuilder.from(user);
+UserBuilder.builder(user);
 ```
 
 ### Setter Methods
@@ -101,8 +101,8 @@ builder.clearEmail()
 ### Merge Method
 
 ```java
-var builder = UserBuilder.of();
-var user = UserBuilder.of().setName("Alice").setAge(18).build();
+var builder = UserBuilder.builder();
+var user = UserBuilder.builder().setName("Alice").setAge(18).build();
 
 builder.merge(user); // Merge values from existing record
 ```

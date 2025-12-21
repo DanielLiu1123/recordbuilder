@@ -101,26 +101,23 @@ class RecordBuilderProcessorTest {
     }
 
     @Nested
-    class OfMethodTests {
+    class BuilderMethodTests {
         @Test
         void shouldCreateNewBuilderInstance() {
-            // Test that of() creates a new builder instance
-            EverythingBuilder builder1 = EverythingBuilder.of();
-            EverythingBuilder builder2 = EverythingBuilder.of();
+            // Test that builder() creates a new builder instance
+            EverythingBuilder builder1 = EverythingBuilder.builder();
+            EverythingBuilder builder2 = EverythingBuilder.builder();
 
             assertThat(builder1).isNotNull();
             assertThat(builder2).isNotNull();
             assertThat(builder1).isNotSameAs(builder2);
         }
-    }
 
-    @Nested
-    class FromMethodTests {
         @Test
         void shouldCopyAllFieldsFromRecord() {
             // Create a record with some values
             LocalDate date = LocalDate.of(2024, 1, 15);
-            Everything original = EverythingBuilder.of()
+            Everything original = EverythingBuilder.builder()
                     .setByte_((byte) 10)
                     .setShort_((short) 20)
                     .setInt_(100)
@@ -142,15 +139,15 @@ class RecordBuilderProcessorTest {
                     .setHashSetString(new HashSet<>(Set.of("Z")))
                     .build();
 
-            // Test from() creates a builder with all values copied
-            Everything copy = EverythingBuilder.from(original).build();
+            // Test builder(source) creates a builder with all values copied
+            Everything copy = EverythingBuilder.builder(original).build();
 
             assertThat(copy).isEqualTo(original);
         }
 
         @Test
         void shouldThrowExceptionWhenSourceIsNull() {
-            assertThatThrownBy(() -> EverythingBuilder.from(null)).isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> EverythingBuilder.builder(null)).isInstanceOf(NullPointerException.class);
         }
     }
 
@@ -159,7 +156,7 @@ class RecordBuilderProcessorTest {
         @Test
         void shouldMergePrimitiveFields() {
             // Create a source record with primitive values
-            Everything source = EverythingBuilder.of()
+            Everything source = EverythingBuilder.builder()
                     .setByte_((byte) 5)
                     .setShort_((short) 10)
                     .setInt_(50)
@@ -181,7 +178,7 @@ class RecordBuilderProcessorTest {
                     .build();
 
             // Merge into an empty builder
-            Everything result = EverythingBuilder.of().merge(source).build();
+            Everything result = EverythingBuilder.builder().merge(source).build();
 
             assertThat(result).isEqualTo(source);
         }
@@ -189,7 +186,7 @@ class RecordBuilderProcessorTest {
         @Test
         void shouldSkipNullReferenceFields() {
             // Create source with nullable fields set to null
-            Everything source = EverythingBuilder.of()
+            Everything source = EverythingBuilder.builder()
                     .setInt_(42)
                     .setString("test")
                     .setLocalDate(LocalDate.now())
@@ -205,7 +202,7 @@ class RecordBuilderProcessorTest {
 
             // Merge should skip null reference fields
             EverythingBuilder builder =
-                    EverythingBuilder.of().setNullableString("existing").merge(source);
+                    EverythingBuilder.builder().setNullableString("existing").merge(source);
 
             // Nullable field should remain as "existing" since source has null
             assertThat(builder.getNullableString()).isEqualTo("existing");
@@ -214,7 +211,7 @@ class RecordBuilderProcessorTest {
 
         @Test
         void shouldThrowExceptionWhenOtherIsNull() {
-            EverythingBuilder builder = EverythingBuilder.of();
+            EverythingBuilder builder = EverythingBuilder.builder();
 
             assertThatThrownBy(() -> builder.merge(null))
                     .isInstanceOf(NullPointerException.class)
@@ -230,7 +227,7 @@ class RecordBuilderProcessorTest {
             Everything.JavaRecord javaRecord = new Everything.JavaRecord("test");
             Everything.JavaClass javaClass = createJavaClass("class");
 
-            EverythingBuilder builder = EverythingBuilder.of()
+            EverythingBuilder builder = EverythingBuilder.builder()
                     .setByte_((byte) 7)
                     .setInt_(123)
                     .setDouble_(9.99)
@@ -266,7 +263,7 @@ class RecordBuilderProcessorTest {
     class SetterMethodTests {
         @Test
         void shouldSetValidValuesAndReturnBuilder() {
-            EverythingBuilder builder = EverythingBuilder.of();
+            EverythingBuilder builder = EverythingBuilder.builder();
 
             // Test setter return type (fluent interface)
             EverythingBuilder result = builder.setInt_(42);
@@ -298,7 +295,7 @@ class RecordBuilderProcessorTest {
 
         @Test
         void shouldValidateNullForNonNullableFields() {
-            EverythingBuilder builder = EverythingBuilder.of();
+            EverythingBuilder builder = EverythingBuilder.builder();
 
             // Test that non-nullable fields reject null
             assertThatThrownBy(() -> builder.setString(null))
@@ -316,7 +313,7 @@ class RecordBuilderProcessorTest {
 
         @Test
         void shouldAcceptNullForNullableFields() {
-            EverythingBuilder builder = EverythingBuilder.of();
+            EverythingBuilder builder = EverythingBuilder.builder();
 
             // Test that nullable fields accept null
             builder.setNullableString(null);
@@ -331,7 +328,7 @@ class RecordBuilderProcessorTest {
     class HasMethodTests {
         @Test
         void shouldReturnFalseForUnsetFields() {
-            EverythingBuilder builder = EverythingBuilder.of();
+            EverythingBuilder builder = EverythingBuilder.builder();
 
             // Initially, no fields should be set
             assertThat(builder.hasInt_()).isFalse();
@@ -345,7 +342,7 @@ class RecordBuilderProcessorTest {
 
         @Test
         void shouldReturnTrueAfterSettingField() {
-            EverythingBuilder builder = EverythingBuilder.of();
+            EverythingBuilder builder = EverythingBuilder.builder();
 
             // Set a field and check has method
             builder.setInt_(100);
@@ -365,7 +362,7 @@ class RecordBuilderProcessorTest {
         @Test
         void shouldReturnFalseAfterClearingField() {
             EverythingBuilder builder =
-                    EverythingBuilder.of().setInt_(42).setString("test").setDouble_(1.5);
+                    EverythingBuilder.builder().setInt_(42).setString("test").setDouble_(1.5);
 
             assertThat(builder.hasInt_()).isTrue();
             assertThat(builder.hasString()).isTrue();
@@ -388,7 +385,7 @@ class RecordBuilderProcessorTest {
     class ClearMethodTests {
         @Test
         void shouldResetPrimitiveFieldsToZeroValues() {
-            EverythingBuilder builder = EverythingBuilder.of()
+            EverythingBuilder builder = EverythingBuilder.builder()
                     .setByte_((byte) 10)
                     .setInt_(100)
                     .setLong_(1000L)
@@ -430,7 +427,7 @@ class RecordBuilderProcessorTest {
         @Test
         void shouldSetReferenceFieldsToNull() {
             LocalDate date = LocalDate.now();
-            EverythingBuilder builder = EverythingBuilder.of()
+            EverythingBuilder builder = EverythingBuilder.builder()
                     .setString("test")
                     .setNullableString("nullable")
                     .setLocalDate(date)
@@ -463,7 +460,7 @@ class RecordBuilderProcessorTest {
 
         @Test
         void shouldSupportFluentInterface() {
-            EverythingBuilder builder = EverythingBuilder.of().setInt_(42).setString("test");
+            EverythingBuilder builder = EverythingBuilder.builder().setInt_(42).setString("test");
 
             // Test that clear methods return builder for fluent interface
             EverythingBuilder result = builder.clearInt_();
