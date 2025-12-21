@@ -12,9 +12,11 @@ import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
 import java.io.IOException;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.StringJoiner;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Generated;
@@ -170,6 +172,15 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         // Add build() method
         builderClassBuilder.addMethod(generateBuildMethod(recordClassName, components));
+
+        // Add equals() method
+        builderClassBuilder.addMethod(generateEqualsMethod(builderClassName, components));
+
+        // Add hashCode() method
+        builderClassBuilder.addMethod(generateHashCodeMethod(components));
+
+        // Add toString() method
+        builderClassBuilder.addMethod(generateToStringMethod(builderName, components));
 
         // Incremental compilation (Isolating) must have exactly one originating element.
         // See https://docs.gradle.org/current/userguide/java_plugin.html#isolating_annotation_processors
@@ -479,5 +490,108 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             int bitOffset = bitIndex % 64;
             return CodeBlock.of("this." + PRESENCE_MASK_FIELD + "[$L] &= ~$L", arrayIndex, "(1L << " + bitOffset + ")");
         }
+    }
+
+    private MethodSpec generateEqualsMethod(
+            ClassName builderClassName, List<? extends RecordComponentElement> components) {
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("equals")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(boolean.class)
+                .addParameter(Object.class, "obj");
+
+        methodBuilder.addStatement("if (this == obj) return true");
+        methodBuilder.addStatement("if (obj == null || getClass() != obj.getClass()) return false");
+        methodBuilder.addStatement("$T that = ($T) obj", builderClassName, builderClassName);
+
+        // Compare all fields
+        for (RecordComponentElement component : components) {
+            String fieldName = "_" + component.getSimpleName();
+            if (isPrimitive(component)) {
+                methodBuilder.addStatement("if (this.$L != that.$L) return false", fieldName, fieldName);
+            } else {
+                methodBuilder.addStatement(
+                        "if (!$T.equals(this.$L, that.$L)) return false", Objects.class, fieldName, fieldName);
+            }
+        }
+
+        // Compare presence mask
+        int fieldCount = components.size();
+        if (fieldCount <= 64) {
+            methodBuilder.addStatement(
+                    "if (this." + PRESENCE_MASK_FIELD + " != that." + PRESENCE_MASK_FIELD + ") return false");
+        } else {
+            methodBuilder.addStatement(
+                    "if (!$T.equals(this." + PRESENCE_MASK_FIELD + ", that." + PRESENCE_MASK_FIELD + ")) return false",
+                    Arrays.class);
+        }
+
+        methodBuilder.addStatement("return true");
+
+        return methodBuilder.build();
+    }
+
+    private MethodSpec generateHashCodeMethod(List<? extends RecordComponentElement> components) {
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("hashCode")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(int.class);
+
+        // Build the hash code calculation
+        CodeBlock.Builder hashCodeBlock = CodeBlock.builder();
+        hashCodeBlock.add("return $T.hash(", Objects.class);
+
+        boolean first = true;
+        for (RecordComponentElement component : components) {
+            if (!first) {
+                hashCodeBlock.add(", ");
+            }
+            String fieldName = "_" + component.getSimpleName();
+            hashCodeBlock.add("this.$L", fieldName);
+            first = false;
+        }
+
+        // Add presence mask to hash
+        int fieldCount = components.size();
+        if (fieldCount <= 64) {
+            if (!first) {
+                hashCodeBlock.add(", ");
+            }
+            hashCodeBlock.add("this." + PRESENCE_MASK_FIELD);
+        } else {
+            hashCodeBlock.add(", ");
+            hashCodeBlock.add("$T.hashCode(this." + PRESENCE_MASK_FIELD + ")", Arrays.class);
+        }
+
+        hashCodeBlock.add(")");
+        methodBuilder.addStatement(hashCodeBlock.build());
+
+        return methodBuilder.build();
+    }
+
+    private MethodSpec generateToStringMethod(String builderName, List<? extends RecordComponentElement> components) {
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("toString")
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(Override.class)
+                .returns(String.class);
+
+        // Use StringJoiner for cleaner code
+        methodBuilder.addStatement(
+                "$T joiner = new $T($S, $S, $S)", StringJoiner.class, StringJoiner.class, ", ", builderName + "{", "}");
+
+        // For each field, check if it's set before adding to toString
+        for (RecordComponentElement component : components) {
+            String fieldName = component.getSimpleName().toString();
+            String internalFieldName = "_" + fieldName;
+            String hasMethodName = "has" + capitalize(fieldName);
+
+            methodBuilder.beginControlFlow("if ($L())", hasMethodName);
+            methodBuilder.addStatement("joiner.add($S + $L)", internalFieldName + "=", internalFieldName);
+            methodBuilder.endControlFlow();
+        }
+
+        methodBuilder.addStatement("return joiner.toString()");
+
+        return methodBuilder.build();
     }
 }

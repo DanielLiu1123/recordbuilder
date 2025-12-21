@@ -471,6 +471,45 @@ class RecordBuilderProcessorTest {
         }
     }
 
+    @Nested
+    class EqualsMethodTests {
+        @Test
+        void shouldBeEqualForSameFieldValues() {
+            EverythingBuilder builder1 =
+                    EverythingBuilder.builder().setInt_(100).setString("test");
+            EverythingBuilder builder2 =
+                    EverythingBuilder.builder().setInt_(100).setString("test");
+            assertThat(builder1).isNotSameAs(builder2);
+            assertThat(builder1).isEqualTo(builder2);
+        }
+    }
+
+    @Nested
+    class HashCodeMethodTests {
+        @Test
+        void shouldHaveSameHashCodeForSameFieldValues() {
+            EverythingBuilder builder1 =
+                    EverythingBuilder.builder().setInt_(100).setString("test");
+            EverythingBuilder builder2 =
+                    EverythingBuilder.builder().setInt_(100).setString("test");
+            assertThat(builder1.hashCode()).isEqualTo(builder2.hashCode());
+        }
+    }
+
+    @Nested
+    class ToStringMethodTests {
+        @Test
+        void onlyContainsSetFields() {
+            EverythingBuilder builder =
+                    EverythingBuilder.builder().setInt_(42).setBoolean_(true).setString("example");
+
+            String actual = builder.toString();
+
+            String expected = "EverythingBuilder{_int_=42, _boolean_=true, _string=example}";
+            assertThat(actual).isEqualTo(expected);
+        }
+    }
+
     private static JavaFileObject loadTestSource(Class<?> clazz) throws IOException {
         Path projectDir = Path.of("").toAbsolutePath();
         Path testSourceRoot = projectDir.resolve("src/test/java");
