@@ -132,15 +132,15 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         builderClassBuilder.addMethod(
                 MethodSpec.constructorBuilder().addModifiers(Modifier.PRIVATE).build());
 
-        // Add static of() method
-        builderClassBuilder.addMethod(MethodSpec.methodBuilder("of")
+        // Add static builder() method
+        builderClassBuilder.addMethod(MethodSpec.methodBuilder("builder")
                 .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                 .returns(builderClassName)
                 .addStatement("return new $T()", builderClassName)
                 .build());
 
-        // Add static from() method
-        builderClassBuilder.addMethod(generateFromMethod(recordClassName, builderClassName));
+        // Add static builder(source) method
+        builderClassBuilder.addMethod(generateBuilderFromSourceMethod(recordClassName, builderClassName));
 
         // Add merge() method
         builderClassBuilder.addMethod(generateMergeMethod(recordClassName, builderClassName, components));
@@ -180,8 +180,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         javaFile.writeTo(filer);
     }
 
-    private MethodSpec generateFromMethod(ClassName recordClassName, ClassName builderClassName) {
-        return MethodSpec.methodBuilder("from")
+    private MethodSpec generateBuilderFromSourceMethod(ClassName recordClassName, ClassName builderClassName) {
+        return MethodSpec.methodBuilder("builder")
                 .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                 .returns(builderClassName)
                 .addParameter(recordClassName, "source")
