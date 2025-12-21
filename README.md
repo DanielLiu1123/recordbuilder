@@ -45,66 +45,34 @@ public record User(
 After compilation, a `UserBuilder` class will be generated:
 
 ```java
+// Create builder and build object
 User user = UserBuilder.builder()
-    .setName("Alice")
+    .setName("Alice")           // Non-null fields have null checks
     .setAge(18)
     .setEmail("alice@example.com")
     .build();
-```
 
-## Generated API
+// Create builder from existing record
+UserBuilder builder = UserBuilder.builder(user);
 
-For each record marked with `@RecordBuilder`, the following methods are generated:
+// Getter methods
+String name = builder.getName();
+String email = builder.getEmail();
 
-### Creating Builder
+// Has methods (check if field is set)
+boolean hasName = builder.hasName();    // Returns true even if set to default value
+boolean hasEmail = builder.hasEmail();  // Returns false if not set
 
-```java
-// Create an empty builder
-UserBuilder.builder()
+// Clear methods
+builder.clearName();   // Clear field value, has method will return false
+builder.clearEmail();
 
-// Create a builder from an existing record
-var user = UserBuilder.builder()
-    .setName("Alice")
-    .setAge(18)
+// Merge method
+var anotherUser = UserBuilder.builder()
+    .setName("Bob")
+    .setAge(25)
     .build();
-UserBuilder.builder(user);
-```
-
-### Setter Methods
-
-```java
-builder.setName("Alice")     // Non-null fields have null checks
-builder.setEmail(null)       // @Nullable fields can be set to null
-```
-
-### Getter Methods
-
-```java
-String name = builder.getName()
-String email = builder.getEmail()
-```
-
-### Has Methods (Check if Field is Set)
-
-```java
-boolean hasName = builder.hasName()    // Returns true even if set to default value
-boolean hasEmail = builder.hasEmail()  // Returns false if not set
-```
-
-### Clear Methods
-
-```java
-builder.clearName()   // Clear field value, has method will return false
-builder.clearEmail()
-```
-
-### Merge Method
-
-```java
-var builder = UserBuilder.builder();
-var user = UserBuilder.builder().setName("Alice").setAge(18).build();
-
-builder.merge(user); // Merge values from existing record
+builder.merge(anotherUser); // Merge values from existing record
 ```
 
 ## License
