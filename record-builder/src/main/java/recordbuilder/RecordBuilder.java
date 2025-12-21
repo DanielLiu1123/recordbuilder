@@ -18,6 +18,7 @@ import java.lang.annotation.Target;
  *   <li>hasXxx() presence checker methods for all fields</li>
  *   <li>clearXxx() clearer methods for all fields</li>
  *   <li>merge(source) method to merge values from a record</li>
+ *   <li>equals/hashCode/toString</li>
  * </ul>
  *
  * <p>
