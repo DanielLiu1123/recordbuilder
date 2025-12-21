@@ -62,10 +62,10 @@ public final class UserBuilder {
 
     // Factory methods
     public static UserBuilder builder() { ... }
-    public static UserBuilder builder(User source) { ... }
+    public static UserBuilder builder(User prototype) { ... }
 
     // Merge method
-    public UserBuilder merge(User source) { ... }
+    public UserBuilder merge(User other) { ... }
 
     // Setter methods (fluent API)
     public UserBuilder setName(String name) { ... }
@@ -97,8 +97,8 @@ public final class UserBuilder {
 ```
 
 The generated builder includes:
-- **Factory methods**: `builder()` to create new builder, `builder(source)` to copy from existing record
-- **Merge method**: `merge(source)` to copy from existing record
+- **Factory methods**: `builder()` to create new builder, `builder(prototype)` to copy from existing record
+- **Merge method**: `merge(other)` to copy from existing record
 - **Setter methods**: `setXxx()` with fluent API, non-null fields have null validation
 - **Getter methods**: `getXxx()` to access current field values
 - **Has methods**: `hasXxx()` to check if field was explicitly set (returns true even for default values)

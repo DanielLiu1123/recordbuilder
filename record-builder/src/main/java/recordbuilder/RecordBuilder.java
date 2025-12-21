@@ -38,10 +38,10 @@ import java.lang.annotation.Target;
  *
  *     // Factory methods
  *     public static UserBuilder builder() { ... }
- *     public static UserBuilder builder(User source) { ... }
+ *     public static UserBuilder builder(User prototype) { ... }
  *
  *     // Merge method
- *     public UserBuilder merge(User source) { ... }
+ *     public UserBuilder merge(User other) { ... }
  *
  *     // Setter methods
  *     public UserBuilder setName(String name) { ... }
@@ -76,8 +76,8 @@ import java.lang.annotation.Target;
  * The generated builder will include:
  * <ul>
  *   <li>static builder() method to create a new builder</li>
- *   <li>static builder(source) method to create a builder from an existing record</li>
- *   <li>merge(source) method to merge values from a record</li>
+ *   <li>static builder(prototype) method to create a builder from an existing record</li>
+ *   <li>merge(other) method to merge values from a record</li>
  *   <li>setXxx() setter methods for all fields</li>
  *   <li>hasXxx() presence checker methods for all fields</li>
  *   <li>getXxx() getter methods for all fields</li>

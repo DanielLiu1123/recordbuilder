@@ -196,8 +196,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         return MethodSpec.methodBuilder("builder")
                 .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                 .returns(builderClassName)
-                .addParameter(recordClassName, "source")
-                .addStatement("return new $T().merge(source)", builderClassName)
+                .addParameter(recordClassName, "prototype")
+                .addStatement("return new $T().merge(prototype)", builderClassName)
                 .build();
     }
 

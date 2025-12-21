@@ -139,14 +139,14 @@ class RecordBuilderProcessorTest {
                     .setHashSetString(new HashSet<>(Set.of("Z")))
                     .build();
 
-            // Test builder(source) creates a builder with all values copied
+            // Test builder(prototype) creates a builder with all values copied
             Everything copy = EverythingBuilder.builder(original).build();
 
             assertThat(copy).isEqualTo(original);
         }
 
         @Test
-        void shouldThrowExceptionWhenSourceIsNull() {
+        void shouldThrowExceptionWhenPrototypeIsNull() {
             assertThatThrownBy(() -> EverythingBuilder.builder(null)).isInstanceOf(NullPointerException.class);
         }
     }
