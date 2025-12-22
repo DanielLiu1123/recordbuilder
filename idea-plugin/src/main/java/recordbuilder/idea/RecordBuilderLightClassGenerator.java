@@ -16,6 +16,7 @@ import com.intellij.psi.impl.light.LightPsiClassBuilder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -29,6 +30,7 @@ public class RecordBuilderLightClassGenerator extends PsiAugmentProvider {
 
     @NotNull
     @Override
+    @SuppressWarnings("unchecked")
     protected <Psi extends PsiElement> List<Psi> getAugments(@NotNull PsiElement element, @NotNull Class<Psi> type) {
         if (type != PsiClass.class) {
             return Collections.emptyList();
@@ -274,7 +276,7 @@ public class RecordBuilderLightClassGenerator extends PsiAugmentProvider {
     private PsiClassType createRecordType(@NotNull PsiClass recordClass) {
         String qualifiedName = recordClass.getQualifiedName();
         if (qualifiedName == null) {
-            qualifiedName = recordClass.getName();
+            qualifiedName = Objects.requireNonNull(recordClass.getName());
         }
         return PsiType.getTypeByName(qualifiedName, recordClass.getProject(), recordClass.getResolveScope());
     }

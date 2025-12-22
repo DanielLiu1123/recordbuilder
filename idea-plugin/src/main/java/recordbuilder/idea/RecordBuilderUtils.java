@@ -5,6 +5,7 @@ import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiRecordComponent;
 import com.intellij.psi.search.GlobalSearchScope;
+import java.util.Objects;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -109,7 +110,7 @@ public final class RecordBuilderUtils {
      * Check if a PsiClass exists in the current scope.
      */
     public static boolean classExists(@NotNull String qualifiedName, @NotNull GlobalSearchScope scope) {
-        JavaPsiFacade facade = JavaPsiFacade.getInstance(scope.getProject());
+        JavaPsiFacade facade = JavaPsiFacade.getInstance(Objects.requireNonNull(scope.getProject()));
         PsiClass psiClass = facade.findClass(qualifiedName, scope);
         return psiClass != null;
     }
