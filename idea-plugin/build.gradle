@@ -6,6 +6,11 @@ plugins {
 group = "recordbuilder"
 version = "1.0.0"
 
+java {
+    sourceCompatibility = 21
+    targetCompatibility = 21
+}
+
 repositories {
     mavenCentral()
     intellijPlatform {
@@ -15,32 +20,17 @@ repositories {
 
 dependencies {
     compileOnly project(":record-builder")
-    
-    intellijPlatform {
-        intellijIdeaCommunity("2023.2.5")
-        bundledPlugin("com.intellij.java")
-        instrumentationTools()
-    }
-}
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    intellijPlatform {
+        intellijIdea("2025.2.5")
+        bundledPlugin("com.intellij.java")
+    }
 }
 
 intellijPlatform {
-    buildSearchableOptions = false
-    
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "232"
-            untilBuild = "243.*"
+            sinceBuild = "252"
         }
     }
-}
-
-// Disable spotless and spotbugs for IDEA plugin module
-afterEvaluate {
-    tasks.findByName('spotlessJava')?.enabled = false
-    tasks.findByName('spotbugsMain')?.enabled = false
 }

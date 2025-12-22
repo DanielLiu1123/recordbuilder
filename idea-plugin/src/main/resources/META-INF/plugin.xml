@@ -1,6 +1,6 @@
 <idea-plugin>
     <id>recordbuilder.idea-plugin</id>
-    <name>RecordBuilder Support</name>
+    <name>RecordBuilder</name>
     <vendor>RecordBuilder</vendor>
 
     <description><![CDATA[
@@ -9,7 +9,7 @@
         Features:
         - Code completion for generated Builder classes without compilation
         - Support for builder() factory methods
-        - Support for all builder methods (setXxx, getXxx, hasXxx, clearXxx, build, merge)
+        - Support for all builder methods (setXxx, getXxx, hasXxx, clearXxx, merge)
         - Navigation to generated builder classes
 
         Usage:
@@ -22,11 +22,11 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Light class generator for Builder classes -->
-        <lightClassGeneratorExtension
+        <lang.psiAugmentProvider
                 implementation="recordbuilder.idea.RecordBuilderLightClassGenerator"/>
 
         <!-- Augment provider for adding builder() methods to records -->
-        <psi.augmentProvider
+        <lang.psiAugmentProvider
                 implementation="recordbuilder.idea.RecordBuilderAugmentProvider"/>
     </extensions>
 </idea-plugin>

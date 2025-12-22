@@ -29,38 +29,30 @@ public class RecordBuilderLightClassGenerator extends PsiAugmentProvider {
 
     @NotNull
     @Override
-    protected <Psi extends PsiElement> List<Psi> getAugments(
-            @NotNull PsiElement element, @NotNull Class<Psi> type) {
+    protected <Psi extends PsiElement> List<Psi> getAugments(@NotNull PsiElement element, @NotNull Class<Psi> type) {
         if (type != PsiClass.class) {
             return Collections.emptyList();
         }
 
         // Handle both PsiFile and PsiClass as element
         List<Psi> result = new ArrayList<>();
-        
-        if (element instanceof PsiFile) {
+
+        if (element instanceof PsiFile psiFile) {
             // When element is PsiFile, find all record classes with @RecordBuilder
-            PsiFile psiFile = (PsiFile) element;
             PsiElement[] children = psiFile.getChildren();
             for (PsiElement child : children) {
-                if (child instanceof PsiClass) {
-                    PsiClass psiClass = (PsiClass) child;
+                if (child instanceof PsiClass psiClass) {
                     if (RecordBuilderUtils.isRecordBuilder(psiClass)) {
                         PsiClass builderClass = generateBuilderClass(psiClass);
-                        if (builderClass != null) {
-                            result.add((Psi) builderClass);
-                        }
+                        result.add((Psi) builderClass);
                     }
                 }
             }
-        } else if (element instanceof PsiClass) {
+        } else if (element instanceof PsiClass psiClass) {
             // When element is PsiClass, check if it needs a builder
-            PsiClass psiClass = (PsiClass) element;
             if (RecordBuilderUtils.isRecordBuilder(psiClass)) {
                 PsiClass builderClass = generateBuilderClass(psiClass);
-                if (builderClass != null) {
-                    result.add((Psi) builderClass);
-                }
+                result.add((Psi) builderClass);
             }
         }
 
@@ -74,14 +66,14 @@ public class RecordBuilderLightClassGenerator extends PsiAugmentProvider {
         String builderName = RecordBuilderUtils.getBuilderClassName(recordClass);
         String packageName = RecordBuilderUtils.getPackageName(recordClass);
 
-        LightPsiClassBuilder builder =
-                new LightPsiClassBuilder(recordClass, builderName, packageName);
+        LightPsiClassBuilder builder = new LightPsiClassBuilder(recordClass, packageName + "." + builderName);
 
         // Set the visibility to match the record class
         if (recordClass.hasModifierProperty(PsiModifier.PUBLIC)) {
-            builder.setModifiers(PsiModifier.PUBLIC, PsiModifier.FINAL);
+            builder.getModifierList().addModifier(PsiModifier.PUBLIC);
+            builder.getModifierList().addModifier(PsiModifier.FINAL);
         } else {
-            builder.setModifiers(PsiModifier.FINAL);
+            builder.getModifierList().addModifier(PsiModifier.FINAL);
         }
 
         // Get record components
@@ -90,20 +82,20 @@ public class RecordBuilderLightClassGenerator extends PsiAugmentProvider {
         // Add fields
         for (PsiRecordComponent component : components) {
             PsiField field = createBuilderField(recordClass, component);
-            builder.addField(field);
+            builder.add(field);
         }
 
         // Add presence mask field
-        builder.addField(createPresenceMaskField(recordClass, components.length));
+        builder.add(createPresenceMaskField(recordClass, components.length));
 
         // Add private constructor
         builder.addMethod(createPrivateConstructor(recordClass, builderName));
 
         // Add static builder() method
-        builder.addMethod(createStaticBuilderMethod(recordClass, builderName));
+        builder.addMethod(createStaticBuilderMethod(recordClass));
 
         // Add static builder(prototype) method
-        builder.addMethod(createStaticBuilderFromPrototypeMethod(recordClass, builderName));
+        builder.addMethod(createStaticBuilderFromPrototypeMethod(recordClass));
 
         // Add merge() method
         builder.addMethod(createMergeMethod(recordClass, builderName));
@@ -113,14 +105,14 @@ public class RecordBuilderLightClassGenerator extends PsiAugmentProvider {
             builder.addMethod(createSetterMethod(recordClass, component, builderName));
         }
 
-        // Add getter methods
-        for (PsiRecordComponent component : components) {
-            builder.addMethod(createGetterMethod(recordClass, component));
-        }
-
         // Add has methods
         for (PsiRecordComponent component : components) {
             builder.addMethod(createHasMethod(recordClass, component));
+        }
+
+        // Add getter methods
+        for (PsiRecordComponent component : components) {
+            builder.addMethod(createGetterMethod(recordClass, component));
         }
 
         // Add clear methods
@@ -131,7 +123,19 @@ public class RecordBuilderLightClassGenerator extends PsiAugmentProvider {
         // Add build() method
         builder.addMethod(createBuildMethod(recordClass));
 
+        // Add toString method
+        builder.addMethod(createToStringMethod(recordClass));
+
         return builder;
+    }
+
+    private PsiMethod createToStringMethod(@NotNull PsiClass recordClass) {
+        LightMethodBuilder method = new LightMethodBuilder(recordClass.getManager(), "toString");
+        method.setModifiers(PsiModifier.PUBLIC);
+        method.setContainingClass(recordClass);
+        method.setMethodReturnType(PsiType.getJavaLangString(recordClass.getManager(), recordClass.getResolveScope()));
+        method.getModifierList().addAnnotation("java.lang.Override");
+        return method;
     }
 
     private PsiField createBuilderField(@NotNull PsiClass recordClass, @NotNull PsiRecordComponent component) {
@@ -166,7 +170,7 @@ public class RecordBuilderLightClassGenerator extends PsiAugmentProvider {
         return method;
     }
 
-    private PsiMethod createStaticBuilderMethod(@NotNull PsiClass recordClass, @NotNull String builderName) {
+    private PsiMethod createStaticBuilderMethod(@NotNull PsiClass recordClass) {
         LightMethodBuilder method = new LightMethodBuilder(recordClass.getManager(), "builder");
         method.setModifiers(PsiModifier.PUBLIC, PsiModifier.STATIC);
         method.setContainingClass(recordClass);
@@ -177,8 +181,7 @@ public class RecordBuilderLightClassGenerator extends PsiAugmentProvider {
         return method;
     }
 
-    private PsiMethod createStaticBuilderFromPrototypeMethod(
-            @NotNull PsiClass recordClass, @NotNull String builderName) {
+    private PsiMethod createStaticBuilderFromPrototypeMethod(@NotNull PsiClass recordClass) {
         LightMethodBuilder method = new LightMethodBuilder(recordClass.getManager(), "builder");
         method.setModifiers(PsiModifier.PUBLIC, PsiModifier.STATIC);
         method.setContainingClass(recordClass);

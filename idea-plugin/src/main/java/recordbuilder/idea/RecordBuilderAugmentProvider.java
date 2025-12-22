@@ -1,12 +1,8 @@
 package recordbuilder.idea;
 
 import com.intellij.psi.PsiClass;
-import com.intellij.psi.PsiClassType;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiModifier;
-import com.intellij.psi.PsiType;
 import com.intellij.psi.augment.PsiAugmentProvider;
-import com.intellij.psi.impl.light.LightMethodBuilder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -23,8 +19,7 @@ public class RecordBuilderAugmentProvider extends PsiAugmentProvider {
 
     @NotNull
     @Override
-    protected <Psi extends PsiElement> List<Psi> getAugments(
-            @NotNull PsiElement element, @NotNull Class<Psi> type) {
+    protected <Psi extends PsiElement> List<Psi> getAugments(@NotNull PsiElement element, @NotNull Class<Psi> type) {
         if (!(element instanceof PsiClass)) {
             return Collections.emptyList();
         }
