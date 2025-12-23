@@ -82,13 +82,13 @@ public class RecordBuilderLightClassGenerator extends PsiAugmentProvider {
         PsiRecordComponent[] components = recordClass.getRecordComponents();
 
         // Add fields
-        for (PsiRecordComponent component : components) {
-            PsiField field = createBuilderField(recordClass, component);
-            builder.add(field);
-        }
+        //        for (PsiRecordComponent component : components) {
+        //            PsiField field = createBuilderField(recordClass, component);
+        //            builder.add(field);
+        //        }
 
         // Add presence mask field
-        builder.add(createPresenceMaskField(recordClass, components.length));
+        //        builder.add(createPresenceMaskField(recordClass, components.length));
 
         // Add private constructor
         builder.addMethod(createPrivateConstructor(recordClass, builderName));
@@ -136,7 +136,6 @@ public class RecordBuilderLightClassGenerator extends PsiAugmentProvider {
         method.setModifiers(PsiModifier.PUBLIC);
         method.setContainingClass(recordClass);
         method.setMethodReturnType(PsiType.getJavaLangString(recordClass.getManager(), recordClass.getResolveScope()));
-        method.getModifierList().addAnnotation("java.lang.Override");
         return method;
     }
 
