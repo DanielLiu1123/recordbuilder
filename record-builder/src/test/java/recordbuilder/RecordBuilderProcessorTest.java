@@ -472,6 +472,68 @@ class RecordBuilderProcessorTest {
     }
 
     @Nested
+    class ClearAllMethodTests {
+        @Test
+        void shouldClearAllFieldsAndResetPresence() {
+            LocalDate date = LocalDate.of(2024, 1, 1);
+            Everything.JavaRecord record = new Everything.JavaRecord("rec");
+            Everything.JavaClass clazz = createJavaClass("cls");
+
+            EverythingBuilder builder = EverythingBuilder.builder()
+                    .setInt_(1)
+                    .setBoolean_(true)
+                    .setString("string")
+                    .setNullableString("nullable")
+                    .setLocalDate(date)
+                    .setJavaRecord(record)
+                    .setJavaClass(clazz)
+                    .setListString(List.of("a"));
+
+            // Ensure some fields are set
+            assertThat(builder.hasInt_()).isTrue();
+            assertThat(builder.hasString()).isTrue();
+            assertThat(builder.hasBoolean_()).isTrue();
+
+            builder.clear();
+
+            // After clear(), all has* methods should return false
+            assertThat(builder.hasByte_()).isFalse();
+            assertThat(builder.hasShort_()).isFalse();
+            assertThat(builder.hasInt_()).isFalse();
+            assertThat(builder.hasLong_()).isFalse();
+            assertThat(builder.hasFloat_()).isFalse();
+            assertThat(builder.hasDouble_()).isFalse();
+            assertThat(builder.hasChar_()).isFalse();
+            assertThat(builder.hasBoolean_()).isFalse();
+            assertThat(builder.hasString()).isFalse();
+            assertThat(builder.hasNullableString()).isFalse();
+            assertThat(builder.hasLocalDate()).isFalse();
+            assertThat(builder.hasNullableLocalDate()).isFalse();
+            assertThat(builder.hasJavaRecord()).isFalse();
+            assertThat(builder.hasNullableJavaRecord()).isFalse();
+            assertThat(builder.hasJavaClass()).isFalse();
+            assertThat(builder.hasNullableJavaClass()).isFalse();
+            assertThat(builder.hasListString()).isFalse();
+
+            // Check that primitive fields are reset to zero-equivalent values
+            assertThat(builder.getInt_()).isEqualTo(0);
+            assertThat(builder.getByte_()).isEqualTo((byte) 0);
+            assertThat(builder.getChar_()).isEqualTo('\0');
+            assertThat(builder.getLong_()).isEqualTo(0L);
+            assertThat(builder.getFloat_()).isEqualTo(0.0f);
+
+            // Check that object-type fields are reset to null
+            assertThat(builder.getBoolean_()).isNull();
+            assertThat(builder.getDouble_()).isNull();
+            assertThat(builder.getShort_()).isNull();
+            assertThat(builder.getNullableString()).isNull();
+            assertThat(builder.getNullableLocalDate()).isNull();
+            assertThat(builder.getNullableJavaRecord()).isNull();
+            assertThat(builder.getNullableJavaClass()).isNull();
+        }
+    }
+
+    @Nested
     class ToStringMethodTests {
         @Test
         void onlyContainsSetFields() {

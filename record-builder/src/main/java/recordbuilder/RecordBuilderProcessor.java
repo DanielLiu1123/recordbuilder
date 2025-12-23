@@ -12,6 +12,7 @@ import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
 import java.io.IOException;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -177,6 +178,9 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builderClassBuilder.addMethod(generateClearMethod(builderClassName, component, i, components.size()));
         }
 
+        // Add clear() method to clear all fields
+        builderClassBuilder.addMethod(generateClearAllMethod(builderClassName, components));
+
         // Add build() method
         builderClassBuilder.addMethod(generateBuildMethod(recordClassName, components));
 
@@ -253,6 +257,40 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         methodBuilder.addStatement(generateClearBitStatement(fieldIndex, totalFields));
 
         methodBuilder.addStatement("return this");
+        return methodBuilder.build();
+    }
+
+    private MethodSpec generateClearAllMethod(
+            ClassName builderClassName, List<? extends RecordComponentElement> components) {
+        MethodSpec.Builder methodBuilder =
+                MethodSpec.methodBuilder("clear").addModifiers(Modifier.PUBLIC).returns(builderClassName);
+
+        // Reset all fields to their default values
+        for (RecordComponentElement component : components) {
+            String fieldName = component.getSimpleName().toString();
+            if (isPrimitive(component)) {
+                String zeroValue = getPrimitiveZeroValue(component);
+                methodBuilder.addStatement("this._$L = $L", fieldName, zeroValue);
+            } else {
+                methodBuilder.addStatement("this._$L = null", fieldName);
+            }
+        }
+
+        // Reset the presence mask
+        int fieldCount = components.size();
+        if (fieldCount > 0) {
+            if (fieldCount <= 32) {
+                methodBuilder.addStatement("this." + PRESENCE_MASK_FIELD + " = 0");
+            } else if (fieldCount <= 64) {
+                methodBuilder.addStatement("this." + PRESENCE_MASK_FIELD + " = 0L");
+            } else {
+                // Requires import of java.util.Arrays, which JavaPoet will handle
+                methodBuilder.addStatement("$T.fill(this.$L, 0L)", Arrays.class, PRESENCE_MASK_FIELD);
+            }
+        }
+
+        methodBuilder.addStatement("return this");
+
         return methodBuilder.build();
     }
 
@@ -509,9 +547,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             String internalFieldName = "_" + fieldName;
             String hasMethodName = "has" + capitalize(fieldName);
 
-            methodBuilder.beginControlFlow("if ($L())", hasMethodName);
-            methodBuilder.addStatement("joiner.add($S + $L)", internalFieldName + "=", internalFieldName);
-            methodBuilder.endControlFlow();
+            methodBuilder.addStatement(
+                    "if ($L()) joiner.add($S + $L)", hasMethodName, internalFieldName + "=", internalFieldName);
         }
 
         methodBuilder.addStatement("return joiner.toString()");
