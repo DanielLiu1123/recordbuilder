@@ -547,9 +547,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             String internalFieldName = "_" + fieldName;
             String hasMethodName = "has" + capitalize(fieldName);
 
-            methodBuilder.beginControlFlow("if ($L())", hasMethodName);
-            methodBuilder.addStatement("joiner.add($S + $L)", internalFieldName + "=", internalFieldName);
-            methodBuilder.endControlFlow();
+            methodBuilder.addStatement(
+                    "if ($L()) joiner.add($S + $L)", hasMethodName, internalFieldName + "=", internalFieldName);
         }
 
         methodBuilder.addStatement("return joiner.toString()");

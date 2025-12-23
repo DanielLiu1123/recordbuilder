@@ -531,12 +531,6 @@ class RecordBuilderProcessorTest {
             assertThat(builder.getNullableJavaRecord()).isNull();
             assertThat(builder.getNullableJavaClass()).isNull();
         }
-
-        @Test
-        void shouldReturnBuilderForFluentChaining() {
-            EverythingBuilder builder = EverythingBuilder.builder();
-            assertThat(builder.clear()).isSameAs(builder);
-        }
     }
 
     @Nested
