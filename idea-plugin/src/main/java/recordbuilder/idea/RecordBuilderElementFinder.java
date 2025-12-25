@@ -6,6 +6,7 @@ import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementFinder;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiJavaFile;
 import com.intellij.psi.PsiModifier;
 import com.intellij.psi.PsiPackage;
 import com.intellij.psi.impl.light.LightPsiClassBuilder;
@@ -51,18 +52,15 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
     public PsiClass @NotNull [] getClasses(@NotNull PsiPackage psiPackage, @NotNull GlobalSearchScope scope) {
         // 关键：不要调用 psiPackage.getClasses()，否则会触发所有 ElementFinder 的递归调用。
         // 我们通过遍历包下的文件（PsiFile）来获取类。
-        // TODO(Freeman): Do we really need this?
-        //        var result = new ArrayList<PsiClass>();
-        //        for (PsiFile file : psiPackage.getFiles(scope)) {
-        //            if (file instanceof PsiJavaFile javaFile) {
-        //                for (PsiClass psiClass : javaFile.getClasses()) {
-        //                    collectBuilderClasses(psiClass, result);
-        //                }
-        //            }
-        //        }
-        //
-        //        return result.toArray(PsiClass.EMPTY_ARRAY);
-        return super.getClasses(psiPackage, scope);
+        var result = new ArrayList<PsiClass>();
+        for (PsiFile file : psiPackage.getFiles(scope)) {
+            if (file instanceof PsiJavaFile javaFile) {
+                for (PsiClass psiClass : javaFile.getClasses()) {
+                    collectBuilderClasses(psiClass, result);
+                }
+            }
+        }
+        return result.toArray(PsiClass.EMPTY_ARRAY);
     }
 
     private static void collectBuilderClasses(PsiClass psiClass, ArrayList<PsiClass> result) {
