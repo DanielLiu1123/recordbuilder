@@ -1,5 +1,6 @@
 package recordbuilder.idea;
 
+import com.intellij.lang.jvm.JvmModifier;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiClass;
@@ -41,11 +42,24 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
         var facade = JavaPsiFacade.getInstance(project);
         var recordQualifiedName = qualifiedName.substring(0, qualifiedName.length() - "Builder".length());
 
+        // For non-nested records, we can find directly
         PsiClass recordClass = facade.findClass(recordQualifiedName, scope);
         if (recordClass != null
                 && recordClass.isRecord()
                 && RecordBuilderUtils.hasRecordBuilderAnnotation(recordClass)) {
             return createLightBuilderClass(recordClass, qualifiedName);
+        }
+
+        // For nested records, we need to search in the package
+        int lastDot = qualifiedName.lastIndexOf('.');
+        String packageName = lastDot > 0 ? qualifiedName.substring(0, lastDot) : "";
+        PsiPackage psiPackage = facade.findPackage(packageName);
+        if (psiPackage != null) {
+            for (PsiClass clazz : getClasses(psiPackage, scope)) {
+                if (qualifiedName.equals(clazz.getQualifiedName())) {
+                    return clazz;
+                }
+            }
         }
 
         return null;
@@ -59,8 +73,7 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
 
     @Override
     public PsiClass @NotNull [] getClasses(@NotNull PsiPackage psiPackage, @NotNull GlobalSearchScope scope) {
-        // 关键：不要调用 psiPackage.getClasses()，否则会触发所有 ElementFinder 的递归调用。
-        // 我们通过遍历包下的文件（PsiFile）来获取类。
+        // Collect all builder classes in the package
         var result = new ArrayList<PsiClass>();
         for (PsiFile file : psiPackage.getFiles(scope)) {
             if (file instanceof PsiJavaFile javaFile) {
@@ -105,10 +118,17 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
         }
     }
 
-    static PsiClass createLightBuilderClass(PsiClass recordClass, String qualifiedName) {
+    private static PsiClass createLightBuilderClass(PsiClass recordClass, String qualifiedName) {
         String builderClassName = RecordBuilderUtils.getBuilderClassName(recordClass);
         var builder = new RecordBuilderLightClass(recordClass, builderClassName, qualifiedName);
-        builder.getModifierList().addModifier(PsiModifier.PUBLIC);
+        var modifierList = builder.getModifierList();
+        if (recordClass.hasModifier(JvmModifier.PUBLIC)) {
+            modifierList.addModifier(PsiModifier.PUBLIC);
+        } else if (recordClass.hasModifier(JvmModifier.PRIVATE)) {
+            modifierList.addModifier(PsiModifier.PRIVATE);
+        } else if (recordClass.hasModifier(JvmModifier.PROTECTED)) {
+            modifierList.addModifier(PsiModifier.PROTECTED);
+        }
         builder.getModifierList().addModifier(PsiModifier.FINAL);
         var methods = createBuilderMethods(recordClass, builder);
         for (var method : methods) {
@@ -207,7 +227,7 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
         return methods;
     }
 
-    private static class RecordBuilderLightClass extends LightPsiClassBuilder {
+    private static final class RecordBuilderLightClass extends LightPsiClassBuilder {
         private final String qualifiedName;
         private final PsiClass recordClass;
 
@@ -230,7 +250,7 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
 
         @Override
         public PsiElement getParent() {
-            return recordClass.getParent();
+            return recordClass.getContainingFile();
         }
     }
 }
