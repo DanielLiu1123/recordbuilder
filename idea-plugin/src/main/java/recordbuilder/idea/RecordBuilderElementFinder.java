@@ -79,7 +79,6 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
         }
 
         var result = new ArrayList<PsiClass>();
-        var facade = JavaPsiFacade.getInstance(project);
         for (PsiFile file : psiPackage.getFiles(scope)) {
             if (file instanceof PsiJavaFile javaFile) {
                 for (PsiClass psiClass : javaFile.getClasses()) {
