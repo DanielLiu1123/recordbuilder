@@ -2,6 +2,7 @@ package recordbuilder.idea;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiElementFinder;
 import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.search.GlobalSearchScope;
@@ -9,14 +10,11 @@ import com.intellij.psi.search.PsiShortNamesCache;
 import com.intellij.util.Processor;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 public class RecordBuilderShortNamesCache extends PsiShortNamesCache {
     private final Project project;
-    private final ConcurrentMap<String, PsiClass> builderCache = new ConcurrentHashMap<>();
 
     public RecordBuilderShortNamesCache(Project project) {
         this.project = project;
@@ -31,10 +29,15 @@ public class RecordBuilderShortNamesCache extends PsiShortNamesCache {
             }
             for (PsiClass recordClass : cache.getClassesByName(name, scope)) {
                 if (recordClass.isRecord() && RecordBuilderUtils.hasRecordBuilderAnnotation(recordClass)) {
-                    var builderFQN = RecordBuilderUtils.getBuilderQualifiedName(recordClass);
-                    var psiClass = builderCache.computeIfAbsent(
-                            builderFQN, fqn -> RecordBuilderElementFinder.createLightBuilderClass(recordClass, fqn));
-                    result.add(psiClass);
+                    for (var psiElementFinder : PsiElementFinder.EP.getExtensions(project)) {
+                        if (psiElementFinder instanceof RecordBuilderElementFinder finder) {
+                            var builderFQN = RecordBuilderUtils.getBuilderQualifiedName(recordClass);
+                            PsiClass builderClass = finder.findClass(builderFQN, scope);
+                            if (builderClass != null) {
+                                result.add(builderClass);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -43,7 +46,7 @@ public class RecordBuilderShortNamesCache extends PsiShortNamesCache {
 
     @Override
     public String @NotNull [] getAllClassNames() {
-        return builderCache.keySet().toArray(new String[0]);
+        return new String[0];
     }
 
     @Override

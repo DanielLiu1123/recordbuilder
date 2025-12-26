@@ -110,7 +110,8 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
         var builder = new RecordBuilderLightClass(recordClass, builderClassName, qualifiedName);
         builder.getModifierList().addModifier(PsiModifier.PUBLIC);
         builder.getModifierList().addModifier(PsiModifier.FINAL);
-        for (var method : createBuilderMethods(recordClass, builder)) {
+        var methods = createBuilderMethods(recordClass, builder);
+        for (var method : methods) {
             builder.addMethod(method);
         }
         return builder;
