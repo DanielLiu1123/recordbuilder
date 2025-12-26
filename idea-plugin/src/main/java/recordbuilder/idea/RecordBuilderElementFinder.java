@@ -1,5 +1,6 @@
 package recordbuilder.idea;
 
+import com.intellij.icons.AllIcons;
 import com.intellij.lang.jvm.JvmModifier;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.JavaPsiFacade;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import javax.swing.Icon;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -251,6 +253,11 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
         @Override
         public PsiElement getParent() {
             return recordClass.getContainingFile();
+        }
+
+        @Override
+        public Icon getIcon(int flags) {
+            return AllIcons.Nodes.Class;
         }
     }
 }
