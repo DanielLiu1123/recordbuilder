@@ -15,24 +15,20 @@ public final class RecordBuilderUtils {
         return psiClass.getAnnotation(ANNOTATION_FQN) != null;
     }
 
-    public static boolean isRecord(@NotNull PsiClass psiClass) {
-        return psiClass.isRecord();
-    }
-
     @NotNull
-    public static String getBuilderClassName(@NotNull PsiClass recordClass) {
+    public static String getBuilderSimpleClassName(@NotNull PsiClass recordClass) {
         return recordClass.getName() + "Builder";
     }
 
     @NotNull
-    public static String getBuilderQualifiedName(@NotNull PsiClass recordClass) {
-        String builderClassName = getBuilderClassName(recordClass);
+    public static String getBuilderFQN(@NotNull PsiClass recordClass) {
+        String builderSimpleClassName = getBuilderSimpleClassName(recordClass);
         PsiFile containingFile = recordClass.getContainingFile();
         if (containingFile instanceof PsiJavaFile psiJavaFile) {
             String packageName = psiJavaFile.getPackageName();
-            return packageName.isEmpty() ? builderClassName : packageName + "." + builderClassName;
+            return packageName.isEmpty() ? builderSimpleClassName : packageName + "." + builderSimpleClassName;
         }
-        return builderClassName;
+        return builderSimpleClassName;
     }
 
     public static @NotNull String capitalize(@NotNull String str) {

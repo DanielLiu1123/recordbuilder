@@ -20,9 +20,7 @@ import com.intellij.psi.impl.light.LightMethodBuilder;
 import com.intellij.psi.impl.light.LightPsiClassBuilder;
 import com.intellij.psi.search.GlobalSearchScope;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import javax.swing.Icon;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -87,32 +85,9 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
         return result.toArray(PsiClass.EMPTY_ARRAY);
     }
 
-    @NotNull
-    @Override
-    public Set<String> getClassNames(@NotNull PsiPackage psiPackage, @NotNull GlobalSearchScope scope) {
-        var result = new HashSet<String>();
-        for (PsiFile file : psiPackage.getFiles(scope)) {
-            if (file instanceof PsiJavaFile javaFile) {
-                for (PsiClass psiClass : javaFile.getClasses()) {
-                    collectBuilderNames(psiClass, result);
-                }
-            }
-        }
-        return result;
-    }
-
-    private static void collectBuilderNames(PsiClass psiClass, Set<String> result) {
-        if (psiClass.isRecord() && RecordBuilderUtils.hasRecordBuilderAnnotation(psiClass)) {
-            result.add(RecordBuilderUtils.getBuilderClassName(psiClass));
-        }
-        for (PsiClass innerClass : psiClass.getInnerClasses()) {
-            collectBuilderNames(innerClass, result);
-        }
-    }
-
     private static void collectBuilderClasses(PsiClass psiClass, ArrayList<PsiClass> result) {
         if (psiClass.isRecord() && RecordBuilderUtils.hasRecordBuilderAnnotation(psiClass)) {
-            String builderQName = RecordBuilderUtils.getBuilderQualifiedName(psiClass);
+            String builderQName = RecordBuilderUtils.getBuilderFQN(psiClass);
             result.add(createLightBuilderClass(psiClass, builderQName));
         }
         for (PsiClass innerClass : psiClass.getInnerClasses()) {
@@ -121,7 +96,7 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
     }
 
     private static PsiClass createLightBuilderClass(PsiClass recordClass, String qualifiedName) {
-        String builderClassName = RecordBuilderUtils.getBuilderClassName(recordClass);
+        String builderClassName = RecordBuilderUtils.getBuilderSimpleClassName(recordClass);
         var builder = new RecordBuilderLightClass(recordClass, builderClassName, qualifiedName);
         var modifierList = builder.getModifierList();
         if (recordClass.hasModifier(JvmModifier.PUBLIC)) {
@@ -229,7 +204,7 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
         return methods;
     }
 
-    private static final class RecordBuilderLightClass extends LightPsiClassBuilder {
+    static final class RecordBuilderLightClass extends LightPsiClassBuilder {
         private final String qualifiedName;
         private final PsiClass recordClass;
 

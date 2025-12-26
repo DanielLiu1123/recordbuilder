@@ -1,8 +1,8 @@
 package recordbuilder.idea;
 
 import com.intellij.openapi.project.Project;
+import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiClass;
-import com.intellij.psi.PsiElementFinder;
 import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.search.GlobalSearchScope;
@@ -29,14 +29,11 @@ public class RecordBuilderShortNamesCache extends PsiShortNamesCache {
             }
             for (PsiClass recordClass : cache.getClassesByName(name, scope)) {
                 if (recordClass.isRecord() && RecordBuilderUtils.hasRecordBuilderAnnotation(recordClass)) {
-                    for (var psiElementFinder : PsiElementFinder.EP.getExtensions(project)) {
-                        if (psiElementFinder instanceof RecordBuilderElementFinder finder) {
-                            var builderFQN = RecordBuilderUtils.getBuilderQualifiedName(recordClass);
-                            PsiClass builderClass = finder.findClass(builderFQN, scope);
-                            if (builderClass != null) {
-                                result.add(builderClass);
-                            }
-                        }
+                    var facade = JavaPsiFacade.getInstance(project);
+                    var builderFQN = RecordBuilderUtils.getBuilderFQN(recordClass);
+                    var builder = facade.findClass(builderFQN, scope);
+                    if (builder != null) {
+                        result.add(builder);
                     }
                 }
             }
