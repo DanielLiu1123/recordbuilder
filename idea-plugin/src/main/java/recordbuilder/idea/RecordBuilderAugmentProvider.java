@@ -34,9 +34,7 @@ public class RecordBuilderAugmentProvider extends PsiAugmentProvider {
         PsiClass recordClass =
                 JavaPsiFacade.getInstance(element.getProject()).findClass(recordFQN, element.getResolveScope());
 
-        if (recordClass == null
-                || !recordClass.isRecord()
-                || !RecordBuilderUtils.hasRecordBuilderAnnotation(recordClass)) {
+        if (!RecordBuilderUtils.hasRecordBuilderAnnotation(recordClass)) {
             return List.of();
         }
 

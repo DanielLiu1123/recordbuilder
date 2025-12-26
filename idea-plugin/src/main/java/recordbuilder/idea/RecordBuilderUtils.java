@@ -4,6 +4,7 @@ import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiJavaFile;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public final class RecordBuilderUtils {
 
@@ -11,8 +12,8 @@ public final class RecordBuilderUtils {
 
     private RecordBuilderUtils() {}
 
-    public static boolean hasRecordBuilderAnnotation(@NotNull PsiClass psiClass) {
-        return psiClass.getAnnotation(ANNOTATION_FQN) != null;
+    public static boolean hasRecordBuilderAnnotation(@Nullable PsiClass psiClass) {
+        return psiClass != null && psiClass.isRecord() && psiClass.getAnnotation(ANNOTATION_FQN) != null;
     }
 
     @NotNull
@@ -31,7 +32,8 @@ public final class RecordBuilderUtils {
         return builderSimpleClassName;
     }
 
-    public static @NotNull String capitalize(@NotNull String str) {
+    @NotNull
+    public static String capitalize(@NotNull String str) {
         if (str.isEmpty()) {
             return str;
         }

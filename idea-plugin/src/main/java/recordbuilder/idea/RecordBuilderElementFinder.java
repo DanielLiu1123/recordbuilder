@@ -3,6 +3,7 @@ package recordbuilder.idea;
 import com.intellij.icons.AllIcons;
 import com.intellij.lang.jvm.JvmModifier;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassType;
@@ -29,8 +30,8 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
 
     @Nullable
     @Override
-    public PsiClass findClass(@NotNull String qualifiedName, @NotNull GlobalSearchScope scope) {
-        if (!qualifiedName.endsWith("Builder")) {
+    public PsiClass findClass(@NotNull String builderFQN, @NotNull GlobalSearchScope scope) {
+        if (!builderFQN.endsWith("Builder")) {
             return null;
         }
 
@@ -40,23 +41,22 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
         }
 
         var facade = JavaPsiFacade.getInstance(project);
-        var recordQualifiedName = qualifiedName.substring(0, qualifiedName.length() - "Builder".length());
+        var recordFQN = builderFQN.substring(0, builderFQN.length() - "Builder".length());
 
         // For non-nested records, we can find directly
-        PsiClass recordClass = facade.findClass(recordQualifiedName, scope);
-        if (recordClass != null
-                && recordClass.isRecord()
-                && RecordBuilderUtils.hasRecordBuilderAnnotation(recordClass)) {
-            return createLightBuilderClass(recordClass, qualifiedName);
+        PsiClass recordClass = facade.findClass(recordFQN, scope);
+        if (RecordBuilderUtils.hasRecordBuilderAnnotation(recordClass)) {
+            if (isAbsent(scope, builderFQN)) {
+                return createLightBuilderClass(recordClass, builderFQN);
+            }
         }
 
         // For nested records, we need to search in the package
-        int lastDot = qualifiedName.lastIndexOf('.');
-        String packageName = lastDot > 0 ? qualifiedName.substring(0, lastDot) : "";
+        String packageName = StringUtil.getPackageName(builderFQN);
         PsiPackage psiPackage = facade.findPackage(packageName);
         if (psiPackage != null) {
             for (PsiClass clazz : getClasses(psiPackage, scope)) {
-                if (qualifiedName.equals(clazz.getQualifiedName())) {
+                if (builderFQN.equals(clazz.getQualifiedName())) {
                     return clazz;
                 }
             }
@@ -73,31 +73,57 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
 
     @Override
     public PsiClass @NotNull [] getClasses(@NotNull PsiPackage psiPackage, @NotNull GlobalSearchScope scope) {
-        // Collect all builder classes in the package
+        var project = scope.getProject();
+        if (project == null) {
+            return PsiClass.EMPTY_ARRAY;
+        }
+
         var result = new ArrayList<PsiClass>();
+        var facade = JavaPsiFacade.getInstance(project);
         for (PsiFile file : psiPackage.getFiles(scope)) {
             if (file instanceof PsiJavaFile javaFile) {
                 for (PsiClass psiClass : javaFile.getClasses()) {
-                    collectBuilderClasses(psiClass, result);
+                    collectBuilderClasses(scope, psiClass, result);
                 }
             }
         }
+
         return result.toArray(PsiClass.EMPTY_ARRAY);
     }
 
-    private static void collectBuilderClasses(PsiClass psiClass, ArrayList<PsiClass> result) {
-        if (psiClass.isRecord() && RecordBuilderUtils.hasRecordBuilderAnnotation(psiClass)) {
-            String builderQName = RecordBuilderUtils.getBuilderFQN(psiClass);
-            result.add(createLightBuilderClass(psiClass, builderQName));
+    private boolean isAbsent(GlobalSearchScope scope, String fqn) {
+        var project = scope.getProject();
+        if (project == null) {
+            return true;
+        }
+        var finders = PsiElementFinder.EP.getExtensions(project);
+        for (var finder : finders) {
+            if (finder == this) {
+                continue;
+            }
+            var psiClass = finder.findClass(fqn, scope);
+            if (psiClass != null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void collectBuilderClasses(GlobalSearchScope scope, PsiClass psiClass, ArrayList<PsiClass> result) {
+        if (RecordBuilderUtils.hasRecordBuilderAnnotation(psiClass)) {
+            String builderFQN = RecordBuilderUtils.getBuilderFQN(psiClass);
+            if (isAbsent(scope, builderFQN)) {
+                result.add(createLightBuilderClass(psiClass, builderFQN));
+            }
         }
         for (PsiClass innerClass : psiClass.getInnerClasses()) {
-            collectBuilderClasses(innerClass, result);
+            collectBuilderClasses(scope, innerClass, result);
         }
     }
 
-    private static PsiClass createLightBuilderClass(PsiClass recordClass, String qualifiedName) {
+    private static PsiClass createLightBuilderClass(PsiClass recordClass, String builderFQN) {
         String builderClassName = RecordBuilderUtils.getBuilderSimpleClassName(recordClass);
-        var builder = new RecordBuilderLightClass(recordClass, builderClassName, qualifiedName);
+        var builder = new RecordBuilderLightClass(recordClass, builderClassName, builderFQN);
         var modifierList = builder.getModifierList();
         if (recordClass.hasModifier(JvmModifier.PUBLIC)) {
             modifierList.addModifier(PsiModifier.PUBLIC);
