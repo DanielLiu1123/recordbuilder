@@ -131,12 +131,12 @@ class RecordBuilderProcessorTest {
                     .setLocalDate(date)
                     .setJavaRecord(new Everything.JavaRecord("record"))
                     .setJavaClass(createJavaClass("class"))
-                    .setListString(List.of("A", "B"))
-                    .setSetString(Set.of("X", "Y"))
-                    .setMapStringInteger(Map.of("key", 42))
-                    .setArrayListString(new ArrayList<>(List.of("C", "D")))
-                    .setHashMapStringInteger(new HashMap<>(Map.of("hash", 99)))
-                    .setHashSetString(new HashSet<>(Set.of("Z")))
+                    .addAllListString(List.of("A", "B"))
+                    .addAllSetString(Set.of("X", "Y"))
+                    .putAllMapStringInteger(Map.of("key", 42))
+                    .addAllArrayListString(new ArrayList<>(List.of("C", "D")))
+                    .putAllHashMapStringInteger(new HashMap<>(Map.of("hash", 99)))
+                    .addAllHashSetString(new HashSet<>(Set.of("Z")))
                     .build();
 
             // Test builder(prototype) creates a builder with all values copied
@@ -169,12 +169,12 @@ class RecordBuilderProcessorTest {
                     .setLocalDate(LocalDate.of(2024, 6, 1))
                     .setJavaRecord(new Everything.JavaRecord("record"))
                     .setJavaClass(createJavaClass("class"))
-                    .setListString(List.of("X"))
-                    .setSetString(Set.of("S"))
-                    .setMapStringInteger(Map.of("m", 1))
-                    .setArrayListString(new ArrayList<>())
-                    .setHashMapStringInteger(new HashMap<>())
-                    .setHashSetString(new HashSet<>())
+                    .addAllListString(List.of("X"))
+                    .addAllSetString(Set.of("S"))
+                    .putAllMapStringInteger(Map.of("m", 1))
+                    .addAllArrayListString(new ArrayList<>())
+                    .putAllHashMapStringInteger(new HashMap<>())
+                    .addAllHashSetString(new HashSet<>())
                     .build();
 
             // Merge into an empty builder
@@ -192,12 +192,12 @@ class RecordBuilderProcessorTest {
                     .setLocalDate(LocalDate.now())
                     .setJavaRecord(new Everything.JavaRecord("record"))
                     .setJavaClass(createJavaClass("class"))
-                    .setListString(List.of("A"))
-                    .setSetString(Set.of("S"))
-                    .setMapStringInteger(Map.of("k", 1))
-                    .setArrayListString(new ArrayList<>())
-                    .setHashMapStringInteger(new HashMap<>())
-                    .setHashSetString(new HashSet<>())
+                    .addAllListString(List.of("A"))
+                    .addAllSetString(Set.of("S"))
+                    .putAllMapStringInteger(Map.of("k", 1))
+                    .addAllArrayListString(new ArrayList<>())
+                    .putAllHashMapStringInteger(new HashMap<>())
+                    .addAllHashSetString(new HashSet<>())
                     .build();
 
             // Merge should skip null reference fields
@@ -238,9 +238,9 @@ class RecordBuilderProcessorTest {
                     .setLocalDate(date)
                     .setJavaRecord(javaRecord)
                     .setJavaClass(javaClass)
-                    .setListString(List.of("L1", "L2"))
-                    .setSetString(Set.of("S1"))
-                    .setMapStringInteger(Map.of("key", 999));
+                    .addAllListString(List.of("L1", "L2"))
+                    .addAllSetString(Set.of("S1"))
+                    .putAllMapStringInteger(Map.of("key", 999));
 
             // Test all getter methods
             assertThat(builder.getByte_()).isEqualTo((byte) 7);
@@ -306,9 +306,9 @@ class RecordBuilderProcessorTest {
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("localDate cannot be null");
 
-            assertThatThrownBy(() -> builder.setListString(null))
+            assertThatThrownBy(() -> builder.addAllListString(null))
                     .isInstanceOf(NullPointerException.class)
-                    .hasMessageContaining("listString cannot be null");
+                    .hasMessageContaining("values cannot be null");
         }
 
         @Test
@@ -355,7 +355,7 @@ class RecordBuilderProcessorTest {
             builder.setNullableString(null);
             assertThat(builder.hasNullableString()).isTrue(); // Even null sets the field
 
-            builder.setListString(List.of());
+            builder.addAllListString(List.of());
             assertThat(builder.hasListString()).isTrue();
         }
 
@@ -431,9 +431,9 @@ class RecordBuilderProcessorTest {
                     .setString("test")
                     .setNullableString("nullable")
                     .setLocalDate(date)
-                    .setListString(List.of("A", "B"))
-                    .setSetString(Set.of("X"))
-                    .setMapStringInteger(Map.of("key", 1));
+                    .addAllListString(List.of("A", "B"))
+                    .addAllSetString(Set.of("X"))
+                    .putAllMapStringInteger(Map.of("key", 1));
 
             // Clear nullable reference field - can safely get after clear
             builder.clearNullableString();
@@ -472,6 +472,27 @@ class RecordBuilderProcessorTest {
     }
 
     @Nested
+    class ListAndMapMethodsTests {
+        @Test
+        void shouldHandleListAndMapOperations() {
+            EverythingBuilder builder = EverythingBuilder.builder()
+                    .addListString("one")
+                    .addListString("two")
+                    .addAllListString(List.of("three", "four"))
+                    .putMapStringInteger("key1", 1)
+                    .putAllMapStringInteger(Map.of("key2", 2, "key3", 3));
+
+            Everything record = builder.build();
+
+            assertThat(record.listString()).containsExactly("one", "two", "three", "four");
+            assertThat(record.mapStringInteger())
+                    .containsOnly(Map.entry("key1", 1), Map.entry("key2", 2), Map.entry("key3", 3));
+            assertThat(builder.hasListString()).isTrue();
+            assertThat(builder.hasMapStringInteger()).isTrue();
+        }
+    }
+
+    @Nested
     class ClearAllMethodTests {
         @Test
         void shouldClearAllFieldsAndResetPresence() {
@@ -487,7 +508,7 @@ class RecordBuilderProcessorTest {
                     .setLocalDate(date)
                     .setJavaRecord(record)
                     .setJavaClass(clazz)
-                    .setListString(List.of("a"));
+                    .addAllListString(List.of("a"));
 
             // Ensure some fields are set
             assertThat(builder.hasInt_()).isTrue();

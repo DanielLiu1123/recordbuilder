@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.StringJoiner;
@@ -44,6 +45,33 @@ import javax.tools.Diagnostic;
 public final class RecordBuilderProcessor extends AbstractProcessor {
 
     private static final String PRESENCE_MASK_FIELD = "_presenceMask0_";
+
+    private static final Map<String, String> collectionTypeMappings = Map.ofEntries(
+            Map.entry("java.util.Collection", "java.util.ArrayList"),
+            Map.entry("java.util.List", "java.util.ArrayList"),
+            Map.entry("java.util.Set", "java.util.HashSet"),
+            Map.entry("java.util.Queue", "java.util.LinkedList"),
+            Map.entry("java.util.Deque", "java.util.LinkedList"),
+            Map.entry("java.util.SequencedCollection", "java.util.ArrayList"),
+            Map.entry("java.util.SequencedSet", "java.util.HashSet"),
+            Map.entry("java.util.ArrayList", "java.util.ArrayList"),
+            Map.entry("java.util.LinkedList", "java.util.LinkedList"),
+            Map.entry("java.util.HashSet", "java.util.HashSet"),
+            Map.entry("java.util.SortedSet", "java.util.TreeSet"),
+            Map.entry("java.util.TreeSet", "java.util.TreeSet"));
+
+    private static final Map<String, String> mapTypeMappings = Map.ofEntries(
+            Map.entry("java.util.Map", "java.util.HashMap"),
+            Map.entry("java.util.HashMap", "java.util.HashMap"),
+            Map.entry("java.util.LinkedHashMap", "java.util.LinkedHashMap"),
+            Map.entry("java.util.SortedMap", "java.util.TreeMap"),
+            Map.entry("java.util.SequencedMap", "java.util.LinkedHashMap"),
+            Map.entry("java.util.NavigableMap", "java.util.TreeMap"),
+            Map.entry("java.util.Hashtable", "java.util.Hashtable"),
+            Map.entry("java.util.IdentityHashMap", "java.util.IdentityHashMap"),
+            Map.entry("java.util.TreeMap", "java.util.TreeMap"),
+            Map.entry("java.util.concurrent.ConcurrentMap", "java.util.concurrent.ConcurrentHashMap"),
+            Map.entry("java.util.concurrent.ConcurrentHashMap", "java.util.concurrent.ConcurrentHashMap"));
 
     private Filer filer;
     private Messager messager;
@@ -158,7 +186,15 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // Add setter methods for all fields
         for (int i = 0; i < components.size(); i++) {
             RecordComponentElement component = components.get(i);
-            builderClassBuilder.addMethod(generateSetterMethod(builderClassName, component, i, components.size()));
+            if (isCollection(component)) {
+                builderClassBuilder.addMethod(generateAddMethod(builderClassName, component, i, components.size()));
+                builderClassBuilder.addMethod(generateAddAllMethod(builderClassName, component, i, components.size()));
+            } else if (isMap(component)) {
+                builderClassBuilder.addMethod(generatePutMethod(builderClassName, component, i, components.size()));
+                builderClassBuilder.addMethod(generatePutAllMethod(builderClassName, component, i, components.size()));
+            } else {
+                builderClassBuilder.addMethod(generateSetterMethod(builderClassName, component, i, components.size()));
+            }
         }
 
         // Add hasXxx() methods for all fields
@@ -234,6 +270,133 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         methodBuilder.addStatement("return this");
 
         return methodBuilder.build();
+    }
+
+    private MethodSpec generateAddMethod(
+            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
+        String fieldName = component.getSimpleName().toString();
+        String methodName = "add" + capitalize(fieldName);
+        DeclaredType declaredType = (DeclaredType) component.asType();
+        TypeName elementType =
+                getTypeNameWithAnnotations(declaredType.getTypeArguments().get(0));
+        String collectionType = collectionTypeMappings.get(getTypeFQN(component));
+
+        var builder = MethodSpec.methodBuilder(methodName)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(builderClassName)
+                .addParameter(elementType, "value");
+        if (!isTypeNullable(declaredType.getTypeArguments().get(0))) {
+            builder.addStatement("$T.requireNonNull(value, \"value cannot be null\")", Objects.class);
+        }
+        builder.addStatement(
+                        "if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, getClass(collectionType))
+                .addStatement("this._$L.add(value)", fieldName)
+                .addStatement(generateSetBitStatement(fieldIndex, totalFields))
+                .addStatement("return this");
+        return builder.build();
+    }
+
+    private static Class<?> getClass(String className) {
+        try {
+            return Class.forName(className);
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("Class not found: " + className, e);
+        }
+    }
+
+    private MethodSpec generateAddAllMethod(
+            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
+        String fieldName = component.getSimpleName().toString();
+        String methodName = "addAll" + capitalize(fieldName);
+        DeclaredType declaredType = (DeclaredType) component.asType();
+        TypeName elementType =
+                getTypeNameWithAnnotations(declaredType.getTypeArguments().get(0));
+        TypeName fieldType = ParameterizedTypeName.get(ClassName.get(Iterable.class), elementType);
+        String collectionType = collectionTypeMappings.get(getTypeFQN(component));
+
+        var builder = MethodSpec.methodBuilder(methodName)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(builderClassName)
+                .addParameter(fieldType, "values");
+        builder.addStatement("$T.requireNonNull(values, \"values cannot be null\")", Objects.class)
+                .addStatement(
+                        "if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, getClass(collectionType))
+                .beginControlFlow("for ($T value : values)", elementType);
+        if (!isTypeNullable(declaredType.getTypeArguments().get(0))) {
+            builder.addStatement("$T.requireNonNull(value, \"value cannot be null\")", Objects.class);
+        }
+        builder.addStatement("this._$L.add(value)", fieldName)
+                .endControlFlow()
+                .addStatement(generateSetBitStatement(fieldIndex, totalFields))
+                .addStatement("return this");
+        return builder.build();
+    }
+
+    private MethodSpec generatePutMethod(
+            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
+        String fieldName = component.getSimpleName().toString();
+        String methodName = "put" + capitalize(fieldName);
+        DeclaredType declaredType = (DeclaredType) component.asType();
+        TypeName keyType =
+                getTypeNameWithAnnotations(declaredType.getTypeArguments().get(0));
+        TypeName valueType =
+                getTypeNameWithAnnotations(declaredType.getTypeArguments().get(1));
+        String mapType = mapTypeMappings.get(getTypeFQN(component));
+
+        var builder = MethodSpec.methodBuilder(methodName)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(builderClassName)
+                .addParameter(keyType, "key")
+                .addParameter(valueType, "value");
+        if (!isTypeNullable(declaredType.getTypeArguments().get(0))) {
+            builder.addStatement("$T.requireNonNull(key, \"key cannot be null\")", Objects.class);
+        }
+        if (!isTypeNullable(declaredType.getTypeArguments().get(1))) {
+            builder.addStatement("$T.requireNonNull(value, \"value cannot be null\")", Objects.class);
+        }
+        builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, getClass(mapType))
+                .addStatement("this._$L.put(key, value)", fieldName)
+                .addStatement(generateSetBitStatement(fieldIndex, totalFields))
+                .addStatement("return this");
+        return builder.build();
+    }
+
+    private static String getTypeFQN(RecordComponentElement component) {
+        return ((TypeElement) ((DeclaredType) component.asType()).asElement())
+                .getQualifiedName()
+                .toString();
+    }
+
+    private MethodSpec generatePutAllMethod(
+            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
+        String fieldName = component.getSimpleName().toString();
+        String methodName = "putAll" + capitalize(fieldName);
+        DeclaredType declaredType = (DeclaredType) component.asType();
+        TypeName keyType =
+                getTypeNameWithAnnotations(declaredType.getTypeArguments().get(0));
+        TypeName valueType =
+                getTypeNameWithAnnotations(declaredType.getTypeArguments().get(1));
+        TypeName fieldType = ParameterizedTypeName.get(ClassName.get(Map.class), keyType, valueType);
+        String mapType = mapTypeMappings.get(getTypeFQN(component));
+
+        var builder = MethodSpec.methodBuilder(methodName)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(builderClassName)
+                .addParameter(fieldType, "values");
+        builder.addStatement("$T.requireNonNull(values, \"values cannot be null\")", Objects.class)
+                .addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, getClass(mapType))
+                .beginControlFlow("for ($T.Entry<$T, $T> entry : values.entrySet())", Map.class, keyType, valueType);
+        if (!isTypeNullable(declaredType.getTypeArguments().get(0))) {
+            builder.addStatement("$T.requireNonNull(entry.getKey(), \"key cannot be null\")", Objects.class);
+        }
+        if (!isTypeNullable(declaredType.getTypeArguments().get(1))) {
+            builder.addStatement("$T.requireNonNull(entry.getValue(), \"value cannot be null\")", Objects.class);
+        }
+        builder.addStatement("this._$L.put(entry.getKey(), entry.getValue())", fieldName)
+                .endControlFlow()
+                .addStatement(generateSetBitStatement(fieldIndex, totalFields))
+                .addStatement("return this");
+        return builder.build();
     }
 
     private MethodSpec generateClearMethod(
@@ -358,19 +521,32 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         for (RecordComponentElement component : components) {
             String fieldName = component.getSimpleName().toString();
-            String getterName = fieldName;
             String setterName = "set" + capitalize(fieldName);
+            String allAllName = "addAll" + capitalize(fieldName);
+            String putAllName = "putAll" + capitalize(fieldName);
 
             // Use setter method for all fields
             if (isPrimitive(component)) {
                 // If primitive, no null check needed
-                methodBuilder.addStatement("this.$L(other.$L())", setterName, getterName);
+                methodBuilder.addStatement("this.$L(other.$L())", setterName, fieldName);
             } else {
                 // For reference types, check null before setting
-                methodBuilder
-                        .beginControlFlow("if (other.$L() != null)", getterName)
-                        .addStatement("this.$L(other.$L())", setterName, getterName)
-                        .endControlFlow();
+                if (isCollection(component)) {
+                    methodBuilder
+                            .beginControlFlow("if (other.$L() != null)", fieldName)
+                            .addStatement("this.$L(other.$L())", allAllName, fieldName)
+                            .endControlFlow();
+                } else if (isMap(component)) {
+                    methodBuilder
+                            .beginControlFlow("if (other.$L() != null)", fieldName)
+                            .addStatement("this.$L(other.$L())", putAllName, fieldName)
+                            .endControlFlow();
+                } else {
+                    methodBuilder
+                            .beginControlFlow("if (other.$L() != null)", fieldName)
+                            .addStatement("this.$L(other.$L())", setterName, fieldName)
+                            .endControlFlow();
+                }
             }
         }
 
@@ -384,6 +560,22 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             return str;
         }
         return str.substring(0, 1).toUpperCase() + str.substring(1);
+    }
+
+    private static boolean isCollection(RecordComponentElement component) {
+        TypeMirror type = component.asType();
+        if (type.getKind() != TypeKind.DECLARED) {
+            return false;
+        }
+        return collectionTypeMappings.containsKey(getTypeFQN(component));
+    }
+
+    private static boolean isMap(RecordComponentElement component) {
+        TypeMirror type = component.asType();
+        if (type.getKind() != TypeKind.DECLARED) {
+            return false;
+        }
+        return mapTypeMappings.containsKey(getTypeFQN(component));
     }
 
     private boolean isNullable(RecordComponentElement component) {
