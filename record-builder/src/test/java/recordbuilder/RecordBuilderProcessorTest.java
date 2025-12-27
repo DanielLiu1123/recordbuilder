@@ -94,10 +94,17 @@ class RecordBuilderProcessorTest {
                 Compiler.javac().withProcessors(new RecordBuilderProcessor()).compile(source);
 
         CompilationSubject.assertThat(compilation).succeeded();
-        CompilationSubject.assertThat(compilation)
-                .generatedSourceFile("recordbuilder.EverythingBuilder")
+
+        var everythingBuilderSource =
+                CompilationSubject.assertThat(compilation).generatedSourceFile("recordbuilder.EverythingBuilder");
+
+        // Verify array component annotation
+        // JavaPoet might add a space after the dot for nested classes: Everything. @Nullable JavaClass
+        // And it might add newlines
+        everythingBuilderSource.contentsAsUtf8String().contains("setNullableJavaClassArray");
+        everythingBuilderSource
                 .contentsAsUtf8String()
-                .contains("getString()");
+                .contains("Everything. @Nullable JavaClass[] nullableJavaClassArray");
     }
 
     @Nested

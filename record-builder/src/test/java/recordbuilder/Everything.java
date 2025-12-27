@@ -36,6 +36,17 @@ public record Everything(
         Everything.JavaClass javaClass,
         Everything.@Nullable JavaClass nullableJavaClass,
 
+        // array types
+        int[] intArray,
+        int @Nullable [] intNullableArray,
+        @Nullable String[] nullableStringArray,
+        String @Nullable [] stringNullableArray,
+        @Nullable String @Nullable [] nullableStringNullableArray,
+        Everything.JavaRecord[] javaRecordArray,
+        Everything.@Nullable JavaRecord @Nullable [] nullableJavaRecordNullableArray,
+        Everything.JavaClass[] javaClassArray,
+        Everything.@Nullable JavaClass[] nullableJavaClassArray,
+
         // collection types
         List<String> listString,
         @Nullable List<String> nullableListString,

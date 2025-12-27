@@ -1,6 +1,7 @@
 package recordbuilder;
 
 import com.palantir.javapoet.AnnotationSpec;
+import com.palantir.javapoet.ArrayTypeName;
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.CodeBlock;
 import com.palantir.javapoet.FieldSpec;
@@ -32,6 +33,7 @@ import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.RecordComponentElement;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
@@ -685,6 +687,10 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 ClassName rawType = ClassName.get(typeElement);
                 typeName = ParameterizedTypeName.get(rawType, typeArgumentNames);
             }
+        } else if (type.getKind() == TypeKind.ARRAY) {
+            ArrayType arrayType = (ArrayType) type;
+            TypeName componentTypeName = getTypeNameWithAnnotations(arrayType.getComponentType());
+            typeName = ArrayTypeName.of(componentTypeName);
         }
 
         // Add @Nullable annotation to the top-level type if present
