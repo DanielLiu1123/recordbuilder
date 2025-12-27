@@ -62,11 +62,11 @@ public final class UserBuilder {
 
     private UserBuilder() {}
 
-    // Factory methods
+    // Factory methods to create a new builder
     public static UserBuilder builder() { ... }
     public static UserBuilder builder(User prototype) { ... }
 
-    // Merge method
+    // Merge method to merge non-null fields from another record
     public UserBuilder merge(User other) { ... }
 
     // Setter methods (fluent API)
@@ -84,7 +84,7 @@ public final class UserBuilder {
     public Integer getAge() { ... }
     public @Nullable String getEmail() { ... }
 
-    // Clear methods
+    // Clear methods to reset fields and mark as unset
     public UserBuilder clearName() { ... }
     public UserBuilder clearAge() { ... }
     public UserBuilder clearEmail() { ... }
