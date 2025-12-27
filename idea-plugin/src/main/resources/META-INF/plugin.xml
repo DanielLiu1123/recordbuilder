@@ -13,6 +13,6 @@
     <extensions defaultExtensionNs="com.intellij">
         <java.elementFinder implementation="recordbuilder.idea.RecordBuilderElementFinder" order="first"/>
         <java.shortNamesCache implementation="recordbuilder.idea.RecordBuilderShortNamesCache"/>
-<!--        <lang.psiAugmentProvider implementation="recordbuilder.idea.RecordBuilderAugmentProvider"/>-->
+        <lang.psiAugmentProvider implementation="recordbuilder.idea.RecordBuilderAugmentProvider"/>
     </extensions>
 </idea-plugin>

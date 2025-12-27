@@ -25,6 +25,7 @@ public record Everything(
         Double double_,
         char char_,
         Boolean boolean_,
+        String foo,
 
         // reference types
         String string,

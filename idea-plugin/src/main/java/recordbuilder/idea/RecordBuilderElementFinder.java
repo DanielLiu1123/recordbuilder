@@ -184,7 +184,8 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
 
         // clearXxx methods
         for (PsiRecordComponent component : recordClass.getRecordComponents()) {
-            String methodName = "clear" + RecordBuilderUtils.capitalize(component.getName());
+            var name = component.getName();
+            String methodName = "clear" + RecordBuilderUtils.capitalize(name);
             LightMethodBuilder clearMethod = new LightMethodBuilder(recordClass.getManager(), methodName);
             clearMethod.setModifiers(PsiModifier.PUBLIC);
             clearMethod.setContainingClass(builderClass);
