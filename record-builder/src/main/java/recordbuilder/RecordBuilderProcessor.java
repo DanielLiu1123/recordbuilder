@@ -313,15 +313,23 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         DeclaredType declaredType = (DeclaredType) component.asType();
         TypeName elementType =
                 getTypeNameWithAnnotations(declaredType.getTypeArguments().get(0));
-        TypeName fieldType = ParameterizedTypeName.get(ClassName.get(Iterable.class), elementType);
+        TypeName fieldType = getParameterTypeForCollection(declaredType);
         String collectionType = collectionTypeMappings.get(getTypeFQN(component));
 
         var builder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
                 .returns(builderClassName)
                 .addParameter(fieldType, "values");
-        builder.addStatement("$T.requireNonNull(values, \"values cannot be null\")", Objects.class)
-                .addStatement(
+        if (isTypeNullable(declaredType)) {
+            builder.beginControlFlow("if (values == null)")
+                    .addStatement("this._$L = null", fieldName)
+                    .addStatement(generateSetBitStatement(fieldIndex, totalFields))
+                    .addStatement("return this")
+                    .endControlFlow();
+        } else {
+            builder.addStatement("$T.requireNonNull(values, \"values cannot be null\")", Objects.class);
+        }
+        builder.addStatement(
                         "if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, getClass(collectionType))
                 .beginControlFlow("for ($T value : values)", elementType);
         if (!isTypeNullable(declaredType.getTypeArguments().get(0))) {
@@ -378,15 +386,23 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 getTypeNameWithAnnotations(declaredType.getTypeArguments().get(0));
         TypeName valueType =
                 getTypeNameWithAnnotations(declaredType.getTypeArguments().get(1));
-        TypeName fieldType = ParameterizedTypeName.get(ClassName.get(Map.class), keyType, valueType);
+        TypeName fieldType = getParameterTypeForMap(declaredType);
         String mapType = mapTypeMappings.get(getTypeFQN(component));
 
         var builder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
                 .returns(builderClassName)
                 .addParameter(fieldType, "values");
-        builder.addStatement("$T.requireNonNull(values, \"values cannot be null\")", Objects.class)
-                .addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, getClass(mapType))
+        if (isTypeNullable(declaredType)) {
+            builder.beginControlFlow("if (values == null)")
+                    .addStatement("this._$L = null", fieldName)
+                    .addStatement(generateSetBitStatement(fieldIndex, totalFields))
+                    .addStatement("return this")
+                    .endControlFlow();
+        } else {
+            builder.addStatement("$T.requireNonNull(values, \"values cannot be null\")", Objects.class);
+        }
+        builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, getClass(mapType))
                 .beginControlFlow("for ($T.Entry<$T, $T> entry : values.entrySet())", Map.class, keyType, valueType);
         if (!isTypeNullable(declaredType.getTypeArguments().get(0))) {
             builder.addStatement("$T.requireNonNull(entry.getKey(), \"key cannot be null\")", Objects.class);
@@ -399,6 +415,30 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addStatement(generateSetBitStatement(fieldIndex, totalFields))
                 .addStatement("return this");
         return builder.build();
+    }
+
+    private TypeName getParameterTypeForMap(DeclaredType declaredType) {
+        ClassName rawType = ClassName.get(Map.class);
+        if (isTypeNullable(declaredType)) {
+            rawType = rawType.annotated(AnnotationSpec.builder(getNullableAnnotationFromType(declaredType))
+                    .build());
+        }
+        TypeName keyType =
+                getTypeNameWithAnnotations(declaredType.getTypeArguments().get(0));
+        TypeName valueType =
+                getTypeNameWithAnnotations(declaredType.getTypeArguments().get(1));
+        return ParameterizedTypeName.get(rawType, keyType, valueType);
+    }
+
+    private TypeName getParameterTypeForCollection(DeclaredType declaredType) {
+        ClassName rawType = ClassName.get(Iterable.class);
+        if (isTypeNullable(declaredType)) {
+            rawType = rawType.annotated(AnnotationSpec.builder(getNullableAnnotationFromType(declaredType))
+                    .build());
+        }
+        TypeName elementType =
+                getTypeNameWithAnnotations(declaredType.getTypeArguments().get(0));
+        return ParameterizedTypeName.get(rawType, elementType);
     }
 
     private MethodSpec generateClearMethod(
