@@ -1,14 +1,5 @@
 plugins {
-    id "java"
     id "org.jetbrains.intellij.platform" version "2.10.5"
-}
-
-group = "recordbuilder"
-version = "1.0.0"
-
-java {
-    sourceCompatibility = 21
-    targetCompatibility = 21
 }
 
 repositories {
