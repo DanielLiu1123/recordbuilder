@@ -273,7 +273,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private static boolean hasWildcard(TypeName typeName) {
-        if (typeName instanceof WildcardTypeName) {
+        if (isWildcard(typeName)) {
             return true;
         }
         if (typeName instanceof ParameterizedTypeName paramType) {
@@ -284,6 +284,10 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             }
         }
         return false;
+    }
+
+    private static boolean isWildcard(TypeName typeName) {
+        return typeName instanceof WildcardTypeName;
     }
 
     private MethodSpec generateAddMethod(
@@ -442,7 +446,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("$T.requireNonNull(entry.getValue(), $S)", Objects.class, "value cannot be null");
         }
 
-        if (hasWildcard(component.asType())) {
+        if (hasWildcard(fieldType)) {
             builder.addStatement("(($T) this._$L).put(entry.getKey(), entry.getValue())", implClass, fieldName);
         } else {
             builder.addStatement("this._$L.put(entry.getKey(), entry.getValue())", fieldName);
@@ -496,9 +500,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         }
         var keyType = getTypeArgument(declaredType, 0);
         var valueType = getTypeArgument(declaredType, 1);
-        var keyTypeName = hasWildcard(keyType) ? keyType : WildcardTypeName.subtypeOf(keyType);
-        var valueTypeName = hasWildcard(valueType) ? valueType : WildcardTypeName.subtypeOf(valueType);
-        return ParameterizedTypeName.get(rawType, keyTypeName, valueTypeName);
+        // There must be a reason why Protobuf doesn't use wildcards here like for Collection :)
+        return ParameterizedTypeName.get(rawType, keyType, valueType);
     }
 
     private TypeName getParameterTypeForCollection(DeclaredType declaredType) {
@@ -513,8 +516,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             // addAll should accept any Iterable<?>
             return ParameterizedTypeName.get(rawType, WildcardTypeName.subtypeOf(Object.class));
         }
-        TypeName elementType = getTypeNameWithAnnotations(typeArguments.get(0));
-        if (hasWildcard(elementType)) {
+        TypeName elementType = getTypeArgument(declaredType, 0);
+        if (isWildcard(elementType)) {
             return ParameterizedTypeName.get(rawType, elementType);
         } else {
             return ParameterizedTypeName.get(rawType, WildcardTypeName.subtypeOf(elementType));

@@ -77,6 +77,7 @@ public record Everything(
         Map<?, String> mapWildcardString,
         Map<String, ? extends Object> mapStringWildcardExtendsObject,
         Map<? extends String, ? extends @Nullable Object> mapWildcardExtendsStringWildcardExtendsObject,
+        Map<String, List<? extends Number>> mapStringListWildcardExtendsNumber,
         Map<@Nullable String, @Nullable Integer> mapNullableStringNullableInteger,
         Map<String, List<@Nullable String>> mapStringListNullableString,
         Map<String, Everything.@Nullable JavaRecord> mapStringNullableJavaRecord,
