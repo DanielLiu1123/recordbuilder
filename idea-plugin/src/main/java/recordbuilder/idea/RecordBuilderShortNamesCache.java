@@ -28,7 +28,7 @@ public class RecordBuilderShortNamesCache extends PsiShortNamesCache {
                 continue;
             }
             for (PsiClass recordClass : cache.getClassesByName(name, scope)) {
-                if (recordClass.isRecord() && RecordBuilderUtils.hasRecordBuilderAnnotation(recordClass)) {
+                if (RecordBuilderUtils.hasRecordBuilderAnnotation(recordClass)) {
                     var facade = JavaPsiFacade.getInstance(project);
                     var builderFQN = RecordBuilderUtils.getBuilderFQN(recordClass);
                     var builder = facade.findClass(builderFQN, scope);
