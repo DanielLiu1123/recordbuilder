@@ -56,7 +56,7 @@ import java.lang.annotation.Target;
  *
  *     // Adder methods for Collection
  *     public UserBuilder addRole(String value) { ... }
- *     public UserBuilder addAllRoles(Iterable<String> values) { ... }
+ *     public UserBuilder addAllRoles(Iterable<? extends String> values) { ... }
  *
  *     // Putter methods for Map
  *     public UserBuilder putAttribute(String key, String value) { ... }

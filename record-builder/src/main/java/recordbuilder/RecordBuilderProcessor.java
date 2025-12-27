@@ -10,6 +10,7 @@ import com.palantir.javapoet.ParameterSpec;
 import com.palantir.javapoet.ParameterizedTypeName;
 import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
+import com.palantir.javapoet.WildcardTypeName;
 import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
@@ -438,7 +439,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         }
         TypeName elementType =
                 getTypeNameWithAnnotations(declaredType.getTypeArguments().get(0));
-        return ParameterizedTypeName.get(rawType, elementType);
+        return ParameterizedTypeName.get(rawType, WildcardTypeName.subtypeOf(elementType));
     }
 
     private MethodSpec generateClearMethod(

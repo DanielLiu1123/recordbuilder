@@ -80,7 +80,7 @@ public final class UserBuilder {
 
     // Adder methods for Collection
     public UserBuilder addRoles(String value) { ... }
-    public UserBuilder addAllRoles(Iterable<String> values) { ... }
+    public UserBuilder addAllRoles(Iterable<? extends String> values) { ... }
 
     // Putter methods for Map
     public UserBuilder putAttributes(String key, String value) { ... }
