@@ -38,7 +38,9 @@ import org.jspecify.annotations.Nullable;
 public record User(
     String name,
     Integer age,
-    @Nullable String email
+    @Nullable String email,
+    List<String> roles,
+    Map<String, String> attributes
 ) {}
 ```
 
@@ -57,8 +59,10 @@ public final class UserBuilder {
     private String _name;
     private Integer _age;
     private @Nullable String _email;
+    private List<String> _roles;
+    private Map<String, String> _attributes;
    
-    private int _presenceMask0_ = 0;
+    private int _presenceMask0_;
 
     private UserBuilder() {}
 
@@ -69,31 +73,45 @@ public final class UserBuilder {
     // Merge method to merge non-null fields from another record
     public UserBuilder merge(User other) { ... }
 
-    // Setter methods (fluent API)
+    // Setter methods for singular fields
     public UserBuilder setName(String name) { ... }
     public UserBuilder setAge(Integer age) { ... }
     public UserBuilder setEmail(@Nullable String email) { ... }
 
-    // Has methods (check if field was set)
+    // Adder methods for Collection
+    public UserBuilder addRoles(String value) { ... }
+    public UserBuilder addAllRoles(Iterable<String> values) { ... }
+
+    // Putter methods for Map
+    public UserBuilder putAttributes(String key, String value) { ... }
+    public UserBuilder putAllAttributes(Map<String, String> values) { ... }
+
+    // Has methods (check if the field was set)
     public boolean hasName() { ... }
     public boolean hasAge() { ... }
     public boolean hasEmail() { ... }
+    public boolean hasRoles() { ... }
+    public boolean hasAttributes() { ... }
 
     // Getter methods
     public String getName() { ... }
     public Integer getAge() { ... }
     public @Nullable String getEmail() { ... }
+    public List<String> getRoles() { ... }
+    public Map<String, String> getAttributes() { ... }
 
     // Clear methods to reset fields and mark as unset
     public UserBuilder clearName() { ... }
     public UserBuilder clearAge() { ... }
     public UserBuilder clearEmail() { ... }
+    public UserBuilder clearRoles() { ... }
+    public UserBuilder clearAttributes() { ... }
     public UserBuilder clear() { ... }
 
-    // Build method
+    // Build method to create the record
     public User build() { ... }
 
-    // toString
+    // toString method to show only explicitly set fields
     @Override
     public String toString() { ... }
 }
@@ -103,6 +121,7 @@ The generated builder includes:
 - **Factory methods**: `builder()` to create new builder, `builder(prototype)` to copy from existing record
 - **Merge method**: `merge(other)` to copy from existing record
 - **Setter methods**: `setXxx()` with fluent API, non-null fields have null validation
+- **Adder/Putter methods**: `addXxx()`/`addAllXxx()` for Collection, `putXxx()`/`putAllXxx()` for Map
 - **Getter methods**: `getXxx()` to access current field values
 - **Has methods**: `hasXxx()` to check if field was explicitly set (returns true even for default values)
 - **Clear methods**: `clearXxx()` to reset field and mark as unset

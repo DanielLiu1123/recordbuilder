@@ -184,6 +184,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         builderClassBuilder.addMethod(generateMergeMethod(recordClassName, builderClassName, components));
 
         // Add setter methods for all fields
+        // For Collection types, generate addXxx and addAllXxx methods
+        // For Map types, generate putXxx and putAllXxx methods
         for (int i = 0; i < components.size(); i++) {
             RecordComponentElement component = components.get(i);
             if (isCollection(component)) {
