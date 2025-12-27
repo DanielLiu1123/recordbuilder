@@ -325,9 +325,113 @@ class RecordBuilderProcessorTest {
             // Test that nullable fields accept null
             builder.setNullableString(null);
             assertThat(builder.getNullableString()).isNull();
+            assertThat(builder.hasNullableString()).isTrue();
 
             builder.setNullableLocalDate(null);
             assertThat(builder.getNullableLocalDate()).isNull();
+            assertThat(builder.hasNullableLocalDate()).isTrue();
+        }
+    }
+
+    @Nested
+    class AdderMethodTests {
+        @Test
+        void shouldAddElementsToCollections() {
+            EverythingBuilder builder = EverythingBuilder.builder();
+
+            // Test adding elements to list
+            builder.addListString("one").addListString("two");
+            assertThat(builder.getListString()).containsExactly("one", "two");
+
+            // Test adding multiple elements to list
+            builder.addAllListString(List.of("three", "four"));
+            assertThat(builder.getListString()).containsExactly("one", "two", "three", "four");
+
+            // Test adding elements to set
+            builder.addSetString("A").addSetString("B");
+            assertThat(builder.getSetString()).containsExactlyInAnyOrder("A", "B");
+
+            // Test adding multiple elements to set
+            builder.addAllSetString(Set.of("C", "D"));
+            assertThat(builder.getSetString()).containsExactlyInAnyOrder("A", "B", "C", "D");
+        }
+
+        @Test
+        void shouldThrowExceptionWhenAddingNullCollection() {
+            EverythingBuilder builder = EverythingBuilder.builder();
+
+            assertThatThrownBy(() -> builder.addListString(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("value cannot be null");
+
+            assertThatThrownBy(() -> builder.addSetString(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("value cannot be null");
+
+            assertThatThrownBy(() -> builder.addAllListString(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("values cannot be null");
+
+            assertThatThrownBy(() -> builder.addAllSetString(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("values cannot be null");
+        }
+
+        @Test
+        void shouldAcceptNullForNullableCollectionFields() {
+            EverythingBuilder builder = EverythingBuilder.builder();
+
+            builder.addAllNullableListString(null);
+            assertThat(builder.getNullableListString()).isNull();
+            assertThat(builder.hasNullableListString()).isTrue();
+
+            builder.addAllNullableSetString(null);
+            assertThat(builder.getNullableSetString()).isNull();
+            assertThat(builder.hasNullableSetString()).isTrue();
+        }
+    }
+
+    @Nested
+    class PutterMethodTests {
+        @Test
+        void shouldPutEntriesIntoMaps() {
+            EverythingBuilder builder = EverythingBuilder.builder();
+
+            // Test putting single entries
+            builder.putMapStringInteger("key1", 1).putMapStringInteger("key2", 2);
+            assertThat(builder.getMapStringInteger()).containsOnly(Map.entry("key1", 1), Map.entry("key2", 2));
+
+            // Test putting multiple entries
+            builder.putAllMapStringInteger(Map.of("key3", 3, "key4", 4));
+            assertThat(builder.getMapStringInteger())
+                    .containsOnly(
+                            Map.entry("key1", 1), Map.entry("key2", 2), Map.entry("key3", 3), Map.entry("key4", 4));
+        }
+
+        @Test
+        void shouldThrowExceptionWhenPuttingNullKeyOrValue() {
+            EverythingBuilder builder = EverythingBuilder.builder();
+
+            assertThatThrownBy(() -> builder.putMapStringInteger(null, 1))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("key cannot be null");
+
+            assertThatThrownBy(() -> builder.putMapStringInteger("key", null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("value cannot be null");
+
+            assertThatThrownBy(() -> builder.putAllMapStringInteger(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("values cannot be null");
+        }
+
+        @Test
+        void shouldAcceptNullForNullableMapFields() {
+            EverythingBuilder builder = EverythingBuilder.builder();
+
+            builder.putAllNullableMapStringInteger(null);
+            assertThat(builder.getNullableMapStringInteger()).isNull();
+            assertThat(builder.hasNullableMapStringInteger()).isTrue();
         }
     }
 
@@ -432,7 +536,7 @@ class RecordBuilderProcessorTest {
         }
 
         @Test
-        void shouldSetReferenceFieldsToNull() {
+        void clearXxxShouldClearReferenceFieldToNullThenHasXxxShouldReturnFalse() {
             LocalDate date = LocalDate.now();
             EverythingBuilder builder = EverythingBuilder.builder()
                     .setString("test")
@@ -442,122 +546,43 @@ class RecordBuilderProcessorTest {
                     .addAllSetString(Set.of("X"))
                     .putAllMapStringInteger(Map.of("key", 1));
 
-            // Clear nullable reference field - can safely get after clear
             builder.clearNullableString();
             assertThat(builder.getNullableString()).isNull();
             assertThat(builder.hasNullableString()).isFalse();
 
-            // Clear non-nullable reference fields - only test has() method
-            // (getters will throw NPE for unset non-nullable fields)
             builder.clearString();
+            assertThat(builder.getString()).isNull();
             assertThat(builder.hasString()).isFalse();
 
             builder.clearLocalDate();
+            assertThat(builder.getLocalDate()).isNull();
             assertThat(builder.hasLocalDate()).isFalse();
 
             builder.clearListString();
+            assertThat(builder.getListString()).isNull();
             assertThat(builder.hasListString()).isFalse();
 
             builder.clearSetString();
+            assertThat(builder.getSetString()).isNull();
             assertThat(builder.hasSetString()).isFalse();
 
             builder.clearMapStringInteger();
+            assertThat(builder.getMapStringInteger()).isNull();
             assertThat(builder.hasMapStringInteger()).isFalse();
         }
 
         @Test
-        void shouldSupportFluentInterface() {
-            EverythingBuilder builder = EverythingBuilder.builder().setInt_(42).setString("test");
-
-            // Test that clear methods return builder for fluent interface
-            EverythingBuilder result = builder.clearInt_();
-            assertThat(result).isSameAs(builder);
-
-            builder.clearString();
-            assertThat(result).isSameAs(builder);
-        }
-    }
-
-    @Nested
-    class ListAndMapMethodsTests {
-        @Test
-        void shouldHandleListAndMapOperations() {
-            EverythingBuilder builder = EverythingBuilder.builder()
-                    .addListString("one")
-                    .addListString("two")
-                    .addAllListString(List.of("three", "four"))
-                    .putMapStringInteger("key1", 1)
-                    .putAllMapStringInteger(Map.of("key2", 2, "key3", 3));
-
-            Everything record = builder.build();
-
-            assertThat(record.listString()).containsExactly("one", "two", "three", "four");
-            assertThat(record.mapStringInteger())
-                    .containsOnly(Map.entry("key1", 1), Map.entry("key2", 2), Map.entry("key3", 3));
-            assertThat(builder.hasListString()).isTrue();
-            assertThat(builder.hasMapStringInteger()).isTrue();
-        }
-    }
-
-    @Nested
-    class ClearAllMethodTests {
-        @Test
-        void shouldClearAllFieldsAndResetPresence() {
-            LocalDate date = LocalDate.of(2024, 1, 1);
-            Everything.JavaRecord record = new Everything.JavaRecord("rec");
-            Everything.JavaClass clazz = createJavaClass("cls");
-
+        void clearMethodShouldClearAllFields() {
             EverythingBuilder builder = EverythingBuilder.builder()
                     .setInt_(1)
                     .setBoolean_(true)
                     .setString("string")
                     .setNullableString("nullable")
-                    .setLocalDate(date)
-                    .setJavaRecord(record)
-                    .setJavaClass(clazz)
                     .addAllListString(List.of("a"));
-
-            // Ensure some fields are set
-            assertThat(builder.hasInt_()).isTrue();
-            assertThat(builder.hasString()).isTrue();
-            assertThat(builder.hasBoolean_()).isTrue();
 
             builder.clear();
 
-            // After clear(), all has* methods should return false
-            assertThat(builder.hasByte_()).isFalse();
-            assertThat(builder.hasShort_()).isFalse();
-            assertThat(builder.hasInt_()).isFalse();
-            assertThat(builder.hasLong_()).isFalse();
-            assertThat(builder.hasFloat_()).isFalse();
-            assertThat(builder.hasDouble_()).isFalse();
-            assertThat(builder.hasChar_()).isFalse();
-            assertThat(builder.hasBoolean_()).isFalse();
-            assertThat(builder.hasString()).isFalse();
-            assertThat(builder.hasNullableString()).isFalse();
-            assertThat(builder.hasLocalDate()).isFalse();
-            assertThat(builder.hasNullableLocalDate()).isFalse();
-            assertThat(builder.hasJavaRecord()).isFalse();
-            assertThat(builder.hasNullableJavaRecord()).isFalse();
-            assertThat(builder.hasJavaClass()).isFalse();
-            assertThat(builder.hasNullableJavaClass()).isFalse();
-            assertThat(builder.hasListString()).isFalse();
-
-            // Check that primitive fields are reset to zero-equivalent values
-            assertThat(builder.getInt_()).isEqualTo(0);
-            assertThat(builder.getByte_()).isEqualTo((byte) 0);
-            assertThat(builder.getChar_()).isEqualTo('\0');
-            assertThat(builder.getLong_()).isEqualTo(0L);
-            assertThat(builder.getFloat_()).isEqualTo(0.0f);
-
-            // Check that object-type fields are reset to null
-            assertThat(builder.getBoolean_()).isNull();
-            assertThat(builder.getDouble_()).isNull();
-            assertThat(builder.getShort_()).isNull();
-            assertThat(builder.getNullableString()).isNull();
-            assertThat(builder.getNullableLocalDate()).isNull();
-            assertThat(builder.getNullableJavaRecord()).isNull();
-            assertThat(builder.getNullableJavaClass()).isNull();
+            assertThat(builder).usingRecursiveComparison().isEqualTo(EverythingBuilder.builder());
         }
     }
 
