@@ -40,11 +40,10 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
             return null;
         }
 
-        var facade = JavaPsiFacade.getInstance(project);
         var recordFQN = builderFQN.substring(0, builderFQN.length() - "Builder".length());
 
         // For non-nested records, we can find directly
-        PsiClass recordClass = facade.findClass(recordFQN, scope);
+        PsiClass recordClass = doFindClass(scope, recordFQN);
         if (RecordBuilderUtils.hasRecordBuilderAnnotation(recordClass)) {
             if (isAbsent(scope, builderFQN)) {
                 return createLightBuilderClass(recordClass, builderFQN);
@@ -53,7 +52,7 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
 
         // For nested records, we need to search in the package
         String packageName = StringUtil.getPackageName(builderFQN);
-        PsiPackage psiPackage = facade.findPackage(packageName);
+        PsiPackage psiPackage = JavaPsiFacade.getInstance(project).findPackage(packageName);
         if (psiPackage != null) {
             for (PsiClass clazz : getClasses(psiPackage, scope)) {
                 if (builderFQN.equals(clazz.getQualifiedName())) {
@@ -91,21 +90,25 @@ public class RecordBuilderElementFinder extends PsiElementFinder {
     }
 
     private boolean isAbsent(GlobalSearchScope scope, String fqn) {
+        return doFindClass(scope, fqn) == null;
+    }
+
+    @Nullable
+    private PsiClass doFindClass(GlobalSearchScope scope, String fqn) {
         var project = scope.getProject();
         if (project == null) {
-            return true;
+            return null;
         }
         var finders = PsiElementFinder.EP.getExtensions(project);
         for (var finder : finders) {
-            if (finder == this) {
-                continue;
-            }
-            var psiClass = finder.findClass(fqn, scope);
-            if (psiClass != null) {
-                return false;
+            if (finder != this) {
+                var psiClass = finder.findClass(fqn, scope);
+                if (psiClass != null) {
+                    return psiClass;
+                }
             }
         }
-        return true;
+        return null;
     }
 
     private void collectBuilderClasses(GlobalSearchScope scope, PsiClass psiClass, ArrayList<PsiClass> result) {
