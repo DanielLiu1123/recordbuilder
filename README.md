@@ -57,6 +57,8 @@ public final class UserBuilder {
     private String _name;
     private Integer _age;
     private @Nullable String _email;
+   
+    private int _presenceMask0_ = 0;
 
     private UserBuilder() {}
 
@@ -86,6 +88,7 @@ public final class UserBuilder {
     public UserBuilder clearName() { ... }
     public UserBuilder clearAge() { ... }
     public UserBuilder clearEmail() { ... }
+    public UserBuilder clear() { ... }
 
     // Build method
     public User build() { ... }
