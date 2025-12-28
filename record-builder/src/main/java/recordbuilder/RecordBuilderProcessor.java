@@ -117,6 +117,9 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addAnnotation(AnnotationSpec.builder(Generated.class)
                         .addMember("value", "$S", RecordBuilderProcessor.class.getCanonicalName())
                         .addMember("date", "$S", OffsetDateTime.now().toString())
+                        .build())
+                .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
+                        .addMember("value", "{$S, $S}", "unchecked", "rawtypes")
                         .build());
 
         // Add fields
