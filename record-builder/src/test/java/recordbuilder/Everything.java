@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -26,7 +27,7 @@ public record Everything(
         char char_,
         Boolean boolean_,
 
-        // reference types
+        // singular types
         String string,
         @Nullable String nullableString,
         LocalDate localDate,
@@ -35,6 +36,17 @@ public record Everything(
         Everything.@Nullable JavaRecord nullableJavaRecord,
         Everything.JavaClass javaClass,
         Everything.@Nullable JavaClass nullableJavaClass,
+
+        // array types
+        int[] intArray,
+        int @Nullable [] intNullableArray,
+        @Nullable String[] nullableStringArray,
+        String @Nullable [] stringNullableArray,
+        @Nullable String @Nullable [] nullableStringNullableArray,
+        Everything.JavaRecord[] javaRecordArray,
+        Everything.@Nullable JavaRecord @Nullable [] nullableJavaRecordNullableArray,
+        Everything.JavaClass[] javaClassArray,
+        Everything.@Nullable JavaClass[] nullableJavaClassArray,
 
         // collection types
         List<String> listString,
@@ -47,12 +59,25 @@ public record Everything(
         List<Map<Everything.@Nullable JavaClass, Everything.@Nullable JavaRecord>>
                 listMapNullableJavaClassNullableJavaRecord,
         Set<String> setString,
+        List list,
+        @Nullable List nullableList,
+        List<?> listWildcard,
+        List<? extends @Nullable Object> listWildcardExtendsNullableObject,
+        List<? extends Number> listWildcardExtendsNumber,
+        Set set,
+        @Nullable Set nullableSet,
         @Nullable Set<String> nullableSetString,
         Set<@Nullable String> setNullableString,
         Map<String, Integer> mapStringInteger,
         @Nullable Map<String, Integer> nullableMapStringInteger,
         Map<@Nullable String, Integer> mapNullableStringInteger,
         Map<String, @Nullable Integer> mapStringNullableInteger,
+        Map map,
+        @Nullable Map nullableMap,
+        Map<?, String> mapWildcardString,
+        Map<String, ? extends Object> mapStringWildcardExtendsObject,
+        Map<? extends String, ? extends @Nullable Object> mapWildcardExtendsStringWildcardExtendsObject,
+        Map<String, List<? extends Number>> mapStringListWildcardExtendsNumber,
         Map<@Nullable String, @Nullable Integer> mapNullableStringNullableInteger,
         Map<String, List<@Nullable String>> mapStringListNullableString,
         Map<String, Everything.@Nullable JavaRecord> mapStringNullableJavaRecord,
@@ -64,7 +89,13 @@ public record Everything(
         HashMap<String, Integer> hashMapStringInteger,
         @Nullable HashMap<String, Integer> nullableHashMapStringInteger,
         HashSet<String> hashSetString,
-        @Nullable HashSet<String> nullableHashSetString) {
+        @Nullable HashSet<String> nullableHashSetString,
+
+        // unknown collection types
+        Iterable<Object> iterableObject,
+        @Nullable Iterable<Object> nullableIterableObject,
+        CopyOnWriteArrayList<Object> copyOnWriteArrayListObject,
+        CopyOnWriteArrayList<@Nullable Object> nullableCopyOnWriteArrayListObject) {
 
     // provide default values for fields
     public Everything {
