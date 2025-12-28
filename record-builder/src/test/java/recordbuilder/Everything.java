@@ -98,6 +98,11 @@ public record Everything<A, B extends Number>(
         @Nullable A nullableTypeVarA,
         B typeVarB,
         @Nullable B nullableTypeVarB,
+        List<A> listTypeVarA,
+        List<@Nullable A> listNullableTypeVarA,
+        Map<A, B> mapTypeVarATypeVarB,
+        Map<@Nullable A, @Nullable B> mapNullableTypeVarANullableTypeVarB,
+        Map<A, List<B>> mapTypeVarAListTypeVarB,
 
         // unknown collection types
         Iterable<Object> iterableObject,

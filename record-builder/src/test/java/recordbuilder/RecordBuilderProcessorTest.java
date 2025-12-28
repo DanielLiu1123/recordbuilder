@@ -21,6 +21,7 @@ import javax.tools.JavaFileObject;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings({"rawtypes", "unchecked"})
 class RecordBuilderProcessorTest {
 
     @Test
@@ -81,6 +82,35 @@ class RecordBuilderProcessorTest {
 
         CompilationSubject.assertThat(compilation).failed();
         CompilationSubject.assertThat(compilation).hadErrorContaining("@RecordBuilder can only be applied to records");
+    }
+
+    @Test
+    void testGenericRecord() throws IOException {
+        JavaFileObject source = JavaFileObjects.forSourceString("test.GenericRecord", """
+                package test;
+                import recordbuilder.RecordBuilder;
+                import java.util.List;
+                @RecordBuilder
+                public record GenericRecord<T, E extends Number>(T data, E value, List<T> list) {}
+                """);
+
+        Compilation compilation =
+                Compiler.javac().withProcessors(new RecordBuilderProcessor()).compile(source);
+
+        CompilationSubject.assertThat(compilation).succeeded();
+
+        var builderSource =
+                compilation.generatedSourceFile("test.GenericRecordBuilder").orElseThrow();
+        String content = builderSource.getCharContent(true).toString();
+
+        assertThat(content)
+                .contains("public final class GenericRecordBuilder<T, E extends Number>")
+                .contains("public static <T, E extends Number> GenericRecordBuilder<T, E> builder()")
+                .contains("public static <T, E extends Number> GenericRecordBuilder<T, E> builder(")
+                .contains("GenericRecord<T, E> prototype")
+                .contains("public GenericRecordBuilder<T, E> merge(GenericRecord<T, E> other)")
+                .contains("public GenericRecordBuilder<T, E> setData(T data)")
+                .contains("public GenericRecord<T, E> build()");
     }
 
     /**
