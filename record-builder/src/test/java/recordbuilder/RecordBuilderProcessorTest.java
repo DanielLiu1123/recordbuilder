@@ -595,7 +595,7 @@ class RecordBuilderProcessorTest {
 
             String actual = builder.toString();
 
-            String expected = "EverythingBuilder{_int_=42, _boolean_=true, _string=example}";
+            String expected = "EverythingBuilder{int_=42, boolean_=true, string=example}";
             assertThat(actual).isEqualTo(expected);
         }
     }

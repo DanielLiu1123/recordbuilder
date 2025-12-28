@@ -49,32 +49,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
     private static final String PRESENCE_MASK_FIELD = "_presenceMask0_";
 
-    private static final Map<String, String> collectionTypeMappings = Map.ofEntries(
-            Map.entry("java.util.Collection", "java.util.ArrayList"),
-            Map.entry("java.util.List", "java.util.ArrayList"),
-            Map.entry("java.util.Set", "java.util.HashSet"),
-            Map.entry("java.util.Queue", "java.util.LinkedList"),
-            Map.entry("java.util.Deque", "java.util.LinkedList"),
-            Map.entry("java.util.SequencedCollection", "java.util.ArrayList"),
-            Map.entry("java.util.SequencedSet", "java.util.HashSet"),
-            Map.entry("java.util.ArrayList", "java.util.ArrayList"),
-            Map.entry("java.util.LinkedList", "java.util.LinkedList"),
-            Map.entry("java.util.HashSet", "java.util.HashSet"),
-            Map.entry("java.util.SortedSet", "java.util.TreeSet"),
-            Map.entry("java.util.TreeSet", "java.util.TreeSet"));
-
-    private static final Map<String, String> mapTypeMappings = Map.ofEntries(
-            Map.entry("java.util.Map", "java.util.HashMap"),
-            Map.entry("java.util.HashMap", "java.util.HashMap"),
-            Map.entry("java.util.LinkedHashMap", "java.util.LinkedHashMap"),
-            Map.entry("java.util.SortedMap", "java.util.TreeMap"),
-            Map.entry("java.util.SequencedMap", "java.util.LinkedHashMap"),
-            Map.entry("java.util.NavigableMap", "java.util.TreeMap"),
-            Map.entry("java.util.Hashtable", "java.util.Hashtable"),
-            Map.entry("java.util.IdentityHashMap", "java.util.IdentityHashMap"),
-            Map.entry("java.util.TreeMap", "java.util.TreeMap"),
-            Map.entry("java.util.concurrent.ConcurrentMap", "java.util.concurrent.ConcurrentHashMap"),
-            Map.entry("java.util.concurrent.ConcurrentHashMap", "java.util.concurrent.ConcurrentHashMap"));
+    private static final Map<String, String> collectionTypeMappings = getCollectionTypeMappings();
+    private static final Map<String, String> mapTypeMappings = getMapTypeMappings();
 
     private Filer filer;
     private Messager messager;
@@ -881,11 +857,43 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             String hasMethodName = "has" + capitalize(fieldName);
 
             methodBuilder.addStatement(
-                    "if ($L()) joiner.add($S + $L)", hasMethodName, internalFieldName + "=", internalFieldName);
+                    "if ($L()) joiner.add($S + $L)", hasMethodName, fieldName + "=", internalFieldName);
         }
 
         methodBuilder.addStatement("return joiner.toString()");
 
         return methodBuilder.build();
+    }
+
+    private static Map<String, String> getCollectionTypeMappings() {
+        return Map.ofEntries(
+                Map.entry("java.util.Collection", "java.util.ArrayList"),
+                Map.entry("java.util.List", "java.util.ArrayList"),
+                Map.entry("java.util.Set", "java.util.HashSet"),
+                Map.entry("java.util.Queue", "java.util.LinkedList"),
+                Map.entry("java.util.Deque", "java.util.LinkedList"),
+                Map.entry("java.util.SequencedCollection", "java.util.ArrayList"),
+                Map.entry("java.util.SequencedSet", "java.util.HashSet"),
+                Map.entry("java.util.ArrayList", "java.util.ArrayList"),
+                Map.entry("java.util.LinkedList", "java.util.LinkedList"),
+                Map.entry("java.util.HashSet", "java.util.HashSet"),
+                Map.entry("java.util.SortedSet", "java.util.TreeSet"),
+                Map.entry("java.util.TreeSet", "java.util.TreeSet"),
+                Map.entry("java.util.concurrent.CopyOnWriteArrayList", "java.util.concurrent.CopyOnWriteArrayList"));
+    }
+
+    private static Map<String, String> getMapTypeMappings() {
+        return Map.ofEntries(
+                Map.entry("java.util.Map", "java.util.HashMap"),
+                Map.entry("java.util.HashMap", "java.util.HashMap"),
+                Map.entry("java.util.LinkedHashMap", "java.util.LinkedHashMap"),
+                Map.entry("java.util.SortedMap", "java.util.TreeMap"),
+                Map.entry("java.util.SequencedMap", "java.util.LinkedHashMap"),
+                Map.entry("java.util.NavigableMap", "java.util.TreeMap"),
+                Map.entry("java.util.Hashtable", "java.util.Hashtable"),
+                Map.entry("java.util.IdentityHashMap", "java.util.IdentityHashMap"),
+                Map.entry("java.util.TreeMap", "java.util.TreeMap"),
+                Map.entry("java.util.concurrent.ConcurrentMap", "java.util.concurrent.ConcurrentHashMap"),
+                Map.entry("java.util.concurrent.ConcurrentHashMap", "java.util.concurrent.ConcurrentHashMap"));
     }
 }
