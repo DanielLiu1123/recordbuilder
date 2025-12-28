@@ -10,6 +10,7 @@ import com.palantir.javapoet.MethodSpec;
 import com.palantir.javapoet.ParameterizedTypeName;
 import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
+import com.palantir.javapoet.TypeVariableName;
 import com.palantir.javapoet.WildcardTypeName;
 import java.io.IOException;
 import java.time.OffsetDateTime;
@@ -99,12 +100,26 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         String recordName = recordElement.getSimpleName().toString();
         String builderName = recordName + "Builder";
 
-        ClassName recordClassName = ClassName.get(recordElement);
-        ClassName builderClassName = ClassName.get(packageName, builderName);
+        TypeName recordTypeName = TypeName.get(recordElement.asType());
+        TypeName builderTypeName;
+        if (!recordElement.getTypeParameters().isEmpty()) {
+            builderTypeName = ParameterizedTypeName.get(
+                    ClassName.get(packageName, builderName),
+                    recordElement.getTypeParameters().stream()
+                            .map(TypeVariableName::get)
+                            .toArray(TypeName[]::new));
+        } else {
+            builderTypeName = ClassName.get(packageName, builderName);
+        }
 
         List<? extends RecordComponentElement> components = recordElement.getRecordComponents();
 
         TypeSpec.Builder builderClassBuilder = TypeSpec.classBuilder(builderName);
+
+        // Add type parameters from record
+        for (var typeParameter : recordElement.getTypeParameters()) {
+            builderClassBuilder.addTypeVariable(TypeVariableName.get(typeParameter));
+        }
 
         // Set the same visibility as the record
         recordElement.getModifiers().stream()
@@ -153,17 +168,13 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 MethodSpec.constructorBuilder().addModifiers(Modifier.PRIVATE).build());
 
         // Add static builder() method
-        builderClassBuilder.addMethod(MethodSpec.methodBuilder("builder")
-                .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-                .returns(builderClassName)
-                .addStatement("return new $T()", builderClassName)
-                .build());
+        builderClassBuilder.addMethod(generateBuilderMethod(recordElement, builderTypeName));
 
         // Add static builder(source) method
-        builderClassBuilder.addMethod(generateBuilderFromSourceMethod(recordClassName, builderClassName));
+        builderClassBuilder.addMethod(generateBuilderFromSourceMethod(recordElement, builderTypeName));
 
         // Add merge() method
-        builderClassBuilder.addMethod(generateMergeMethod(recordClassName, builderClassName, components));
+        builderClassBuilder.addMethod(generateMergeMethod(recordTypeName, builderTypeName, components));
 
         // Add setter methods for all fields
         // For Collection types, generate addXxx and addAllXxx methods
@@ -171,13 +182,13 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         for (int i = 0; i < components.size(); i++) {
             RecordComponentElement component = components.get(i);
             if (isCollection(component)) {
-                builderClassBuilder.addMethod(generateAddMethod(builderClassName, component, i, components.size()));
-                builderClassBuilder.addMethod(generateAddAllMethod(builderClassName, component, i, components.size()));
+                builderClassBuilder.addMethod(generateAddMethod(builderTypeName, component, i, components.size()));
+                builderClassBuilder.addMethod(generateAddAllMethod(builderTypeName, component, i, components.size()));
             } else if (isMap(component)) {
-                builderClassBuilder.addMethod(generatePutMethod(builderClassName, component, i, components.size()));
-                builderClassBuilder.addMethod(generatePutAllMethod(builderClassName, component, i, components.size()));
+                builderClassBuilder.addMethod(generatePutMethod(builderTypeName, component, i, components.size()));
+                builderClassBuilder.addMethod(generatePutAllMethod(builderTypeName, component, i, components.size()));
             } else {
-                builderClassBuilder.addMethod(generateSetterMethod(builderClassName, component, i, components.size()));
+                builderClassBuilder.addMethod(generateSetterMethod(builderTypeName, component, i, components.size()));
             }
         }
 
@@ -195,14 +206,14 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // Add clear methods for all fields
         for (int i = 0; i < components.size(); i++) {
             RecordComponentElement component = components.get(i);
-            builderClassBuilder.addMethod(generateClearMethod(builderClassName, component, i, components.size()));
+            builderClassBuilder.addMethod(generateClearMethod(builderTypeName, component, i, components.size()));
         }
 
         // Add clear() method to clear all fields
-        builderClassBuilder.addMethod(generateClearAllMethod(builderClassName, components));
+        builderClassBuilder.addMethod(generateClearAllMethod(builderTypeName, components));
 
         // Add build() method
-        builderClassBuilder.addMethod(generateBuildMethod(recordClassName, components));
+        builderClassBuilder.addMethod(generateBuildMethod(recordTypeName, components));
 
         // Add toString() method
         builderClassBuilder.addMethod(generateToStringMethod(builderName, components));
@@ -216,24 +227,43 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         javaFile.writeTo(filer);
     }
 
-    private MethodSpec generateBuilderFromSourceMethod(ClassName recordClassName, ClassName builderClassName) {
-        return MethodSpec.methodBuilder("builder")
+    private static MethodSpec generateBuilderMethod(TypeElement recordElement, TypeName builderTypeName) {
+        MethodSpec.Builder builderMethodBuilder = MethodSpec.methodBuilder("builder")
                 .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-                .returns(builderClassName)
-                .addParameter(recordClassName, "prototype")
-                .addStatement("return new $T().merge(prototype)", builderClassName)
+                .returns(builderTypeName)
+                .addStatement("return new $T()", builderTypeName);
+
+        for (var typeParameter : recordElement.getTypeParameters()) {
+            builderMethodBuilder.addTypeVariable(TypeVariableName.get(typeParameter));
+        }
+
+        return builderMethodBuilder.build();
+    }
+
+    private MethodSpec generateBuilderFromSourceMethod(TypeElement recordElement, TypeName builderTypeName) {
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("builder")
+                .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                .returns(builderTypeName)
+                .addParameter(TypeName.get(recordElement.asType()), "prototype");
+
+        for (var typeParameter : recordElement.getTypeParameters()) {
+            methodBuilder.addTypeVariable(TypeVariableName.get(typeParameter));
+        }
+
+        return methodBuilder
+                .addStatement("return new $T().merge(prototype)", builderTypeName)
                 .build();
     }
 
     private MethodSpec generateSetterMethod(
-            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "set" + capitalize(fieldName);
         TypeName fieldType = getTypeNameWithAnnotations(component.asType());
 
         MethodSpec.Builder builder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
-                .returns(builderClassName)
+                .returns(builderTypeName)
                 .addParameter(fieldType, fieldName);
 
         if (!isNullable(component) && !isPrimitive(component)) {
@@ -252,7 +282,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generateAddMethod(
-            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "add" + capitalize(fieldName);
         DeclaredType declaredType = (DeclaredType) component.asType();
@@ -260,7 +290,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         var builder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
-                .returns(builderClassName)
+                .returns(builderTypeName)
                 .addParameter(eraseType(elementType), "value");
 
         if (!isNullable(elementType)) {
@@ -282,7 +312,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generateAddAllMethod(
-            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "addAll" + capitalize(fieldName);
         DeclaredType declaredType = (DeclaredType) component.asType();
@@ -291,7 +321,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         var builder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
-                .returns(builderClassName)
+                .returns(builderTypeName)
                 .addParameter(fieldType, "values");
         if (isNullable(fieldType)) {
             builder.beginControlFlow("if (values == null)")
@@ -324,7 +354,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generatePutMethod(
-            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "put" + capitalize(fieldName);
         DeclaredType declaredType = (DeclaredType) component.asType();
@@ -333,7 +363,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         var builder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
-                .returns(builderClassName)
+                .returns(builderTypeName)
                 .addParameter(eraseType(keyType), "key")
                 .addParameter(eraseType(valueType), "value");
 
@@ -374,7 +404,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generatePutAllMethod(
-            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "putAll" + capitalize(fieldName);
         DeclaredType declaredType = (DeclaredType) component.asType();
@@ -384,7 +414,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         var builder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
-                .returns(builderClassName)
+                .returns(builderTypeName)
                 .addParameter(fieldType, "values");
         if (isNullable(fieldType)) {
             builder.beginControlFlow("if (values == null)")
@@ -486,13 +516,13 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generateClearMethod(
-            ClassName builderClassName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "clear" + capitalize(fieldName);
 
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
-                .returns(builderClassName);
+                .returns(builderTypeName);
 
         // For primitive types, set to zero value; for reference types, set to null
         if (isPrimitive(component)) {
@@ -510,9 +540,9 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generateClearAllMethod(
-            ClassName builderClassName, List<? extends RecordComponentElement> components) {
+            TypeName builderTypeName, List<? extends RecordComponentElement> components) {
         MethodSpec.Builder methodBuilder =
-                MethodSpec.methodBuilder("clear").addModifiers(Modifier.PUBLIC).returns(builderClassName);
+                MethodSpec.methodBuilder("clear").addModifiers(Modifier.PUBLIC).returns(builderTypeName);
 
         // Reset all fields to their default values
         for (RecordComponentElement component : components) {
@@ -570,13 +600,12 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .build();
     }
 
-    private MethodSpec generateBuildMethod(
-            ClassName recordClassName, List<? extends RecordComponentElement> components) {
+    private MethodSpec generateBuildMethod(TypeName recordTypeName, List<? extends RecordComponentElement> components) {
         MethodSpec.Builder methodBuilder =
-                MethodSpec.methodBuilder("build").addModifiers(Modifier.PUBLIC).returns(recordClassName);
+                MethodSpec.methodBuilder("build").addModifiers(Modifier.PUBLIC).returns(recordTypeName);
 
         // Build the return statement
-        CodeBlock.Builder returnStatement = CodeBlock.builder().add("return new $T(", recordClassName);
+        CodeBlock.Builder returnStatement = CodeBlock.builder().add("return new $T(", recordTypeName);
 
         for (int i = 0; i < components.size(); i++) {
             RecordComponentElement component = components.get(i);
@@ -598,11 +627,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generateMergeMethod(
-            ClassName recordClassName, ClassName builderClassName, List<? extends RecordComponentElement> components) {
+            TypeName recordTypeName, TypeName builderTypeName, List<? extends RecordComponentElement> components) {
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("merge")
                 .addModifiers(Modifier.PUBLIC)
-                .returns(builderClassName)
-                .addParameter(recordClassName, "other")
+                .returns(builderTypeName)
+                .addParameter(recordTypeName, "other")
                 .addStatement("$T.requireNonNull(other, \"other cannot be null\")", Objects.class);
 
         for (RecordComponentElement component : components) {

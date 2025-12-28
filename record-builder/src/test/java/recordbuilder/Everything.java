@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  * @author Freeman
  */
 @RecordBuilder
-public record Everything(
+public record Everything<A, B extends Number>(
         // all primitive types
         byte byte_,
         @Nullable Short short_,
@@ -64,6 +64,8 @@ public record Everything(
         List<?> listWildcard,
         List<? extends @Nullable Object> listWildcardExtendsNullableObject,
         List<? extends Number> listWildcardExtendsNumber,
+        CopyOnWriteArrayList<Object> copyOnWriteArrayListObject,
+        CopyOnWriteArrayList<@Nullable Object> nullableCopyOnWriteArrayListObject,
         Set set,
         @Nullable Set nullableSet,
         @Nullable Set<String> nullableSetString,
@@ -91,11 +93,20 @@ public record Everything(
         HashSet<String> hashSetString,
         @Nullable HashSet<String> nullableHashSetString,
 
+        // typevar
+        A typeVarA,
+        @Nullable A nullableTypeVarA,
+        B typeVarB,
+        @Nullable B nullableTypeVarB,
+        List<A> listTypeVarA,
+        List<@Nullable A> listNullableTypeVarA,
+        Map<A, B> mapTypeVarATypeVarB,
+        Map<@Nullable A, @Nullable B> mapNullableTypeVarANullableTypeVarB,
+        Map<A, List<B>> mapTypeVarAListTypeVarB,
+
         // unknown collection types
         Iterable<Object> iterableObject,
-        @Nullable Iterable<Object> nullableIterableObject,
-        CopyOnWriteArrayList<Object> copyOnWriteArrayListObject,
-        CopyOnWriteArrayList<@Nullable Object> nullableCopyOnWriteArrayListObject) {
+        @Nullable Iterable<Object> nullableIterableObject) {
 
     // provide default values for fields
     public Everything {
