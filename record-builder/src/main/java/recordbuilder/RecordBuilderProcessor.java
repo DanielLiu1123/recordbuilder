@@ -268,24 +268,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .build();
     }
 
-    private static boolean hasWildcard(TypeMirror type) {
-        return hasWildcard(TypeName.get(type));
-    }
-
-    private static boolean hasWildcard(TypeName typeName) {
-        if (isWildcard(typeName)) {
-            return true;
-        }
-        if (typeName instanceof ParameterizedTypeName paramType) {
-            for (var typeArgument : paramType.typeArguments()) {
-                if (hasWildcard(typeArgument)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     private static boolean isWildcard(TypeName typeName) {
         return typeName instanceof WildcardTypeName;
     }
@@ -309,7 +291,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         var implClass = getClass(collectionTypeMappings.get(getTypeFQN(component)));
         builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
 
-        if (hasWildcard(component.asType())) {
+        if (isWildcard(elementType)) {
             builder.addStatement("(($T) this._$L).add(value)", implClass, fieldName);
         } else {
             builder.addStatement("this._$L.add(value)", fieldName);
@@ -350,7 +332,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("$T.requireNonNull(value, $S)", Objects.class, "value cannot be null");
         }
 
-        if (hasWildcard(component.asType())) {
+        if (isWildcard(elementType)) {
             builder.addStatement("(($T) this._$L).add(value)", implClass, fieldName);
         } else {
             builder.addStatement("this._$L.add(value)", fieldName);
@@ -386,7 +368,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         var implClass = getClass(mapTypeMappings.get(getTypeFQN(component)));
         builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
 
-        if (hasWildcard(component.asType())) {
+        if (isWildcard(keyType) || isWildcard(valueType)) {
             builder.addStatement("(($T) this._$L).put(key, value)", implClass, fieldName);
         } else {
             builder.addStatement("this._$L.put(key, value)", fieldName);
@@ -446,7 +428,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("$T.requireNonNull(entry.getValue(), $S)", Objects.class, "value cannot be null");
         }
 
-        if (hasWildcard(fieldType)) {
+        if (isWildcard(keyType) || isWildcard(valueType)) {
             builder.addStatement("(($T) this._$L).put(entry.getKey(), entry.getValue())", implClass, fieldName);
         } else {
             builder.addStatement("this._$L.put(entry.getKey(), entry.getValue())", fieldName);
