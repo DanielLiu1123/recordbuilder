@@ -18,6 +18,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 import javax.annotation.processing.AbstractProcessor;
@@ -132,9 +133,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addAnnotation(AnnotationSpec.builder(Generated.class)
                         .addMember("value", "$S", RecordBuilderProcessor.class.getCanonicalName())
                         .addMember("date", "$S", OffsetDateTime.now().toString())
-                        .build())
-                .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
-                        .addMember("value", "{$S, $S}", "unchecked", "rawtypes")
                         .build());
 
         // Add fields
@@ -297,7 +295,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("$T.requireNonNull(value, $S)", Objects.class, "value cannot be null");
         }
 
-        var implClass = getClass(collectionTypeMappings.get(getTypeFQN(component)));
+        var implClass = getCollectionImplClass(component).orElseThrow();
         builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
 
         if (isWildcard(elementType)) {
@@ -333,7 +331,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("$T.requireNonNull(values, $S)", Objects.class, "values cannot be null");
         }
 
-        var implClass = getClass(collectionTypeMappings.get(getTypeFQN(component)));
+        var implClass = getCollectionImplClass(component).orElseThrow();
         builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
         builder.beginControlFlow("for (var value : values)");
 
@@ -374,7 +372,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("$T.requireNonNull(value, $S)", Objects.class, "value cannot be null");
         }
 
-        var implClass = getClass(mapTypeMappings.get(getTypeFQN(component)));
+        var implClass = getMapImplClass(component).orElseThrow();
         builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
 
         if (isWildcard(keyType) || isWildcard(valueType)) {
@@ -426,7 +424,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("$T.requireNonNull(values, $S)", Objects.class, "values cannot be null");
         }
 
-        var implClass = getClass(mapTypeMappings.get(getTypeFQN(component)));
+        var implClass = getMapImplClass(component).orElseThrow();
         builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
         builder.beginControlFlow("for (var entry : values.entrySet())");
 
@@ -675,6 +673,18 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             return str;
         }
         return str.substring(0, 1).toUpperCase() + str.substring(1);
+    }
+
+    private static Optional<Class<?>> getCollectionImplClass(RecordComponentElement component) {
+        String fqn = getTypeFQN(component);
+        String implName = collectionTypeMappings.get(fqn);
+        return implName != null ? Optional.of(getClass(implName)) : Optional.empty();
+    }
+
+    private static Optional<Class<?>> getMapImplClass(RecordComponentElement component) {
+        String fqn = getTypeFQN(component);
+        String implName = mapTypeMappings.get(fqn);
+        return implName != null ? Optional.of(getClass(implName)) : Optional.empty();
     }
 
     private static boolean isCollection(RecordComponentElement component) {
