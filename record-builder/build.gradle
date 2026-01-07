@@ -1,11 +1,14 @@
 description = "Annotation processor to generate builder classes for Java records. Build your objects with confidence: nullless by default, spec driven, inspired by protobuf"
 
 dependencies {
-    implementation "com.palantir.javapoet:javapoet:${javapoetVersion}"
+    implementation("com.palantir.javapoet:javapoet:${javapoetVersion}")
 
-    testAnnotationProcessor project(":record-builder")
-    testImplementation "org.jspecify:jspecify:${jspecifyVersion}"
-    testImplementation "com.google.testing.compile:compile-testing:${compileTestingVersion}"
+    compileOnly("com.google.guava:guava:${guavaVersion}")
+
+    testAnnotationProcessor(project(":record-builder"))
+    testImplementation("org.jspecify:jspecify:${jspecifyVersion}")
+    testImplementation("com.google.guava:guava:${guavaVersion}")
+    testImplementation("com.google.testing.compile:compile-testing:${compileTestingVersion}")
 }
 
 apply from: "${rootDir}/gradle/deploy.gradle"

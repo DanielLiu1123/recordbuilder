@@ -1,5 +1,8 @@
 package recordbuilder;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -103,6 +106,14 @@ public record Everything<A, B extends Number>(
         Map<A, B> mapTypeVarATypeVarB,
         Map<@Nullable A, @Nullable B> mapNullableTypeVarANullableTypeVarB,
         Map<A, List<B>> mapTypeVarAListTypeVarB,
+
+        // guava collection
+        ImmutableList<String> immutableListString,
+        @Nullable ImmutableList<String> nullableImmutableListString,
+        ImmutableMap<String, Integer> immutableMapStringInteger,
+        @Nullable ImmutableMap<String, Integer> nullableImmutableMapStringInteger,
+        ImmutableSet<String> immutableSetString,
+        @Nullable ImmutableSet<String> nullableImmutableSetString,
 
         // unknown collection types
         Iterable<Object> iterableObject,
