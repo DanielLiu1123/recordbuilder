@@ -28,8 +28,7 @@ import java.lang.annotation.Target;
  * import org.jspecify.annotations.Nullable;
  *
  * @Generated(
- *     value = "recordbuilder.RecordBuilderProcessor",
- *     date = "...",
+ *     value = "recordbuilder.RecordBuilderProcessor"
  * )
  * public final class UserBuilder {
  *     private String _name;
@@ -55,11 +54,11 @@ import java.lang.annotation.Target;
  *     public UserBuilder setEmail(@Nullable String email) { ... }
  *
  *     // Adder methods for Collection
- *     public UserBuilder addRole(String value) { ... }
+ *     public UserBuilder addRoles(String value) { ... }
  *     public UserBuilder addAllRoles(Iterable<? extends String> values) { ... }
  *
  *     // Putter methods for Map
- *     public UserBuilder putAttribute(String key, String value) { ... }
+ *     public UserBuilder putAttributes(String key, String value) { ... }
  *     public UserBuilder putAllAttributes(Map<String, String> values) { ... }
  *
  *     // Has methods to check if field was set
@@ -111,7 +110,17 @@ import java.lang.annotation.Target;
  * </ul>
  *
  * <p>
- * Non-null validation is applied by default unless the field is annotated with @Nullable.
+ * Input null validation is applied by default unless the field is annotated with @Nullable.
+ * Unset reference fields remain null, including in getters and build(). The record constructor
+ * is responsible for required-field validation and any defensive copies. Collections and arrays
+ * are shared by reference with the constructed record.
+ *
+ * <p>Bulk methods validate input nulls before changing the field. Collection-specific insertion
+ * failures are governed by the underlying implementation. Merge skips null references, overwrites
+ * primitive and scalar values, and adds collection elements and map entries.
+ *
+ * <p>Nested records use their simple name for the generated builder and must be accessible from
+ * their package. Builder names must be unique within that package.
  *
  * @author Freeman
  */

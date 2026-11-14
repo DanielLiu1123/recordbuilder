@@ -13,7 +13,8 @@ import com.palantir.javapoet.TypeSpec;
 import com.palantir.javapoet.TypeVariableName;
 import com.palantir.javapoet.WildcardTypeName;
 import java.io.IOException;
-import java.time.OffsetDateTime;
+import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,7 @@ import java.util.Set;
 import java.util.StringJoiner;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
+import javax.annotation.processing.FilerException;
 import javax.annotation.processing.Generated;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -85,11 +87,33 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             }
 
             TypeElement recordElement = (TypeElement) element;
+            if (!isAccessibleFromPackage(recordElement)) {
+                messager.printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@RecordBuilder requires a record and enclosing types accessible from its package",
+                        recordElement);
+                continue;
+            }
             try {
                 generateBuilder(recordElement);
+            } catch (FilerException e) {
+                messager.printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "Cannot generate " + recordElement.getSimpleName()
+                                + "Builder: the builder name conflicts with another type or annotated record",
+                        recordElement);
             } catch (IOException e) {
                 messager.printMessage(
                         Diagnostic.Kind.ERROR, "Failed to generate builder: " + e.getMessage(), recordElement);
+            }
+        }
+        return true;
+    }
+
+    private static boolean isAccessibleFromPackage(TypeElement recordElement) {
+        for (Element element = recordElement; element instanceof TypeElement; element = element.getEnclosingElement()) {
+            if (element.getModifiers().contains(Modifier.PRIVATE)) {
+                return false;
             }
         }
         return true;
@@ -122,9 +146,9 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builderClassBuilder.addTypeVariable(TypeVariableName.get(typeParameter));
         }
 
-        // Set the same visibility as the record
+        // Top-level builders can only be public or package-private.
         recordElement.getModifiers().stream()
-                .filter(m -> m == Modifier.PUBLIC || m == Modifier.PROTECTED || m == Modifier.PRIVATE)
+                .filter(m -> m == Modifier.PUBLIC)
                 .findFirst()
                 .ifPresent(builderClassBuilder::addModifiers);
 
@@ -132,7 +156,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addModifiers(Modifier.FINAL)
                 .addAnnotation(AnnotationSpec.builder(Generated.class)
                         .addMember("value", "$S", RecordBuilderProcessor.class.getCanonicalName())
-                        .addMember("date", "$S", OffsetDateTime.now().toString())
                         .build());
 
         // Add fields
@@ -331,14 +354,21 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("$T.requireNonNull(values, $S)", Objects.class, "values cannot be null");
         }
 
-        var implClass = getCollectionImplClass(component).orElseThrow();
-        builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
+        // Read and validate the entire input before changing the builder.
+        TypeName bufferType = ParameterizedTypeName.get(
+                ClassName.get(ArrayList.class), isWildcard(elementType) ? ClassName.get(Object.class) : elementType);
+        builder.addStatement("var pending = new $T()", bufferType);
         builder.beginControlFlow("for (var value : values)");
 
         if (!isNullable(elementType)) {
             builder.addStatement("$T.requireNonNull(value, $S)", Objects.class, "value cannot be null");
         }
 
+        builder.addStatement("pending.add(value)").endControlFlow();
+
+        var implClass = getCollectionImplClass(component).orElseThrow();
+        builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
+        builder.beginControlFlow("for (var value : pending)");
         if (isWildcard(elementType)) {
             builder.addStatement("(($T) this._$L).add(value)", implClass, fieldName);
         } else {
@@ -424,8 +454,13 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("$T.requireNonNull(values, $S)", Objects.class, "values cannot be null");
         }
 
-        var implClass = getMapImplClass(component).orElseThrow();
-        builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
+        // Snapshot entries so validation failures cannot leave partially written fields.
+        TypeName entryType = ParameterizedTypeName.get(
+                ClassName.get(Map.Entry.class),
+                isWildcard(keyType) ? ClassName.get(Object.class) : keyType,
+                isWildcard(valueType) ? ClassName.get(Object.class) : valueType);
+        TypeName bufferType = ParameterizedTypeName.get(ClassName.get(ArrayList.class), entryType);
+        builder.addStatement("var pending = new $T()", bufferType);
         builder.beginControlFlow("for (var entry : values.entrySet())");
 
         if (!isNullable(keyType)) {
@@ -435,6 +470,12 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("$T.requireNonNull(entry.getValue(), $S)", Objects.class, "value cannot be null");
         }
 
+        builder.addStatement("pending.add(new $T<>(entry))", AbstractMap.SimpleImmutableEntry.class)
+                .endControlFlow();
+
+        var implClass = getMapImplClass(component).orElseThrow();
+        builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
+        builder.beginControlFlow("for (var entry : pending)");
         if (isWildcard(keyType) || isWildcard(valueType)) {
             builder.addStatement("(($T) this._$L).put(entry.getKey(), entry.getValue())", implClass, fieldName);
         } else {
@@ -915,7 +956,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 Map.entry("java.util.Queue", "java.util.LinkedList"),
                 Map.entry("java.util.Deque", "java.util.LinkedList"),
                 Map.entry("java.util.SequencedCollection", "java.util.ArrayList"),
-                Map.entry("java.util.SequencedSet", "java.util.HashSet"),
+                Map.entry("java.util.SequencedSet", "java.util.LinkedHashSet"),
                 Map.entry("java.util.ArrayList", "java.util.ArrayList"),
                 Map.entry("java.util.LinkedList", "java.util.LinkedList"),
                 Map.entry("java.util.HashSet", "java.util.HashSet"),
