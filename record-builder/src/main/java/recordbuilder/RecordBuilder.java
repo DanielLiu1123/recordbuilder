@@ -119,7 +119,8 @@ import java.lang.annotation.Target;
  * failures are governed by the underlying implementation. Merge skips null references, overwrites
  * primitive and scalar values, and adds collection elements and map entries.
  *
- * <p>Nested records use their simple name for the generated builder and must be accessible from
+ * <p>Nested record builder names include all enclosing type names separated by underscores.
+ * Records must be accessible from
  * their package. Builder names must be unique within that package.
  *
  * @author Freeman

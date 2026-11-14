@@ -158,16 +158,61 @@ class GenerationRegressionTest {
     }
 
     @Test
-    void duplicateNestedNamesProduceActionableDiagnostics() {
+    void sameSimpleNamesGenerateDistinctUsableBuilders() throws Exception {
+        Compilation compilation = compile("A", """
+                package test;
+                public class A {
+                    @recordbuilder.RecordBuilder public record Item<T>(T value) {}
+                    public static boolean verify() {
+                        Item<String> a = A_ItemBuilder.<String>builder().setValue("a").build();
+                        B.Item b = B_ItemBuilder.builder().setValue(42).build();
+                        return A_ItemBuilder.builder(a).build().equals(a)
+                                && B_ItemBuilder.builder().merge(b).build().equals(b);
+                    }
+                }
+                class B {
+                    @recordbuilder.RecordBuilder record Item(int value) {}
+                }
+                """);
+        CompilationSubject.assertThat(compilation).succeeded();
+        assertThat(loadClass(compilation, "test.A").getMethod("verify").invoke(null))
+                .isEqualTo(true);
+    }
+
+    @Test
+    void fullEnclosingPathDistinguishesNestedNames() throws Exception {
         Compilation compilation = compile("Outer", """
                 package test;
                 public class Outer {
-                    static class A { @recordbuilder.RecordBuilder record Item() {} }
-                    static class B { @recordbuilder.RecordBuilder record Item() {} }
+                    static class AB { @recordbuilder.RecordBuilder record Item() {} }
+                    static class A {
+                        static class B { @recordbuilder.RecordBuilder record Item() {} }
+                    }
+                    public static boolean verify() {
+                        AB.Item first = Outer_AB_ItemBuilder.builder().build();
+                        A.B.Item second = Outer_A_B_ItemBuilder.builder().build();
+                        return first.equals(new AB.Item()) && second.equals(new A.B.Item());
+                    }
                 }
                 """);
+        CompilationSubject.assertThat(compilation).succeeded();
+        assertThat(loadClass(compilation, "test.Outer").getMethod("verify").invoke(null))
+                .isEqualTo(true);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"class A_ItemBuilder {}", "@recordbuilder.RecordBuilder record A_Item() {}"})
+    void nestedBuilderNameCollisionsProduceActionableDiagnostics(String conflictingType) {
+        Compilation compilation = compile("A", """
+                package test;
+                public class A {
+                    @recordbuilder.RecordBuilder public record Item() {}
+                }
+                %s
+                """.formatted(conflictingType));
         CompilationSubject.assertThat(compilation).failed();
-        CompilationSubject.assertThat(compilation).hadErrorContaining("builder name conflicts");
+        CompilationSubject.assertThat(compilation)
+                .hadErrorContaining("Cannot generate A_ItemBuilder: the builder name conflicts");
     }
 
     @Test

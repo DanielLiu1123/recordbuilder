@@ -99,8 +99,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             } catch (FilerException e) {
                 messager.printMessage(
                         Diagnostic.Kind.ERROR,
-                        "Cannot generate " + recordElement.getSimpleName()
-                                + "Builder: the builder name conflicts with another type or annotated record",
+                        "Cannot generate " + builderName(recordElement)
+                                + ": the builder name conflicts with another type or annotated record",
                         recordElement);
             } catch (IOException e) {
                 messager.printMessage(
@@ -119,11 +119,14 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         return true;
     }
 
+    private static String builderName(TypeElement recordElement) {
+        return String.join("_", ClassName.get(recordElement).simpleNames()) + "Builder";
+    }
+
     private void generateBuilder(TypeElement recordElement) throws IOException {
         String packageName =
                 elementUtils.getPackageOf(recordElement).getQualifiedName().toString();
-        String recordName = recordElement.getSimpleName().toString();
-        String builderName = recordName + "Builder";
+        String builderName = builderName(recordElement);
 
         TypeName recordTypeName = TypeName.get(recordElement.asType());
         TypeName builderTypeName;

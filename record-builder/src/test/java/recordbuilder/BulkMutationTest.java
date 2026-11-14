@@ -16,7 +16,7 @@ class BulkMutationTest {
 
     @Test
     void invalidCollectionDoesNotChangeAnUnsetField() {
-        var builder = BatchBuilder.builder();
+        var builder = BulkMutationTest_BatchBuilder.builder();
         assertThatThrownBy(() -> builder.addAllItems(Arrays.asList("valid", null)))
                 .isInstanceOf(NullPointerException.class);
         assertThat(builder.getItems()).isNull();
@@ -25,7 +25,7 @@ class BulkMutationTest {
 
     @Test
     void invalidCollectionPreservesExistingValuesAndPresence() {
-        var builder = BatchBuilder.builder().addItems("existing");
+        var builder = BulkMutationTest_BatchBuilder.builder().addItems("existing");
         var items = builder.getItems();
         assertThatThrownBy(() -> builder.addAllItems(Arrays.asList("valid", null)))
                 .isInstanceOf(NullPointerException.class);
@@ -35,7 +35,7 @@ class BulkMutationTest {
 
     @Test
     void invalidMapDoesNotChangeAnUnsetField() {
-        var builder = BatchBuilder.builder();
+        var builder = BulkMutationTest_BatchBuilder.builder();
         var values = new LinkedHashMap<String, String>();
         values.put("valid", "value");
         values.put("invalid", null);
@@ -46,7 +46,7 @@ class BulkMutationTest {
 
     @Test
     void invalidMapPreservesExistingValuesAndPresence() {
-        var builder = BatchBuilder.builder().putEntries("existing", "original");
+        var builder = BulkMutationTest_BatchBuilder.builder().putEntries("existing", "original");
         var entries = builder.getEntries();
         var values = new LinkedHashMap<String, String>();
         values.put("existing", "replacement");
@@ -58,7 +58,7 @@ class BulkMutationTest {
 
     @Test
     void failingIterableDoesNotPartiallyWrite() {
-        var builder = BatchBuilder.builder();
+        var builder = BulkMutationTest_BatchBuilder.builder();
         Iterable<String> values = () -> new Iterator<>() {
             private boolean first = true;
 
@@ -83,7 +83,7 @@ class BulkMutationTest {
 
     @Test
     void collectionCanBeAddedToItself() {
-        var builder = BatchBuilder.builder().addItems("one").addItems("two");
+        var builder = BulkMutationTest_BatchBuilder.builder().addItems("one").addItems("two");
         var items = builder.getItems();
         builder.addAllItems(items);
         assertThat(builder.getItems()).isSameAs(items).containsExactly("one", "two", "one", "two");
@@ -105,7 +105,8 @@ class BulkMutationTest {
 
     @Test
     void emptyInputsSetPresenceAndSuccessfulUpdatesKeepExistingReferences() {
-        var builder = BatchBuilder.builder().addAllItems(List.of()).putAllEntries(Map.of());
+        var builder =
+                BulkMutationTest_BatchBuilder.builder().addAllItems(List.of()).putAllEntries(Map.of());
         assertThat(builder.hasItems()).isTrue();
         assertThat(builder.hasEntries()).isTrue();
         var items = builder.getItems();
