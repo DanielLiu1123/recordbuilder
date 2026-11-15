@@ -21,6 +21,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.stream.Collectors;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.FilerException;
@@ -231,7 +232,12 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         JavaFile javaFile =
                 JavaFile.builder(packageName, builderClassBuilder.build()).build();
-        javaFile.writeTo(filer);
+        String source =
+                javaFile.toString().lines().filter(line -> !line.isBlank()).collect(Collectors.joining("\n", "", "\n"));
+        String qualifiedName = packageName.isEmpty() ? builderName : packageName + "." + builderName;
+        try (var writer = filer.createSourceFile(qualifiedName, recordElement).openWriter()) {
+            writer.write(source);
+        }
     }
 
     private static MethodSpec generateBuilderMethod(TypeElement recordElement, TypeName builderTypeName) {
