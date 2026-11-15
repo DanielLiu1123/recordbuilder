@@ -3,11 +3,13 @@ package recordbuilder;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class BulkMutationTest {
@@ -54,6 +56,28 @@ class BulkMutationTest {
         assertThatThrownBy(() -> builder.putAllEntries(values)).isInstanceOf(NullPointerException.class);
         assertThat(builder.getEntries()).isSameAs(entries).containsExactlyEntriesOf(Map.of("existing", "original"));
         assertThat(builder.hasEntries()).isTrue();
+    }
+
+    @Test
+    void bulkPutStoresTheSameEntryValueItValidated() {
+        var entry = new AbstractMap.SimpleEntry<>("key", "observed") {
+            @Override
+            public String getValue() {
+                String value = super.getValue();
+                // Simulate a live entry changing after its value is read.
+                setValue(null);
+                return value;
+            }
+        };
+        var values = new AbstractMap<String, String>() {
+            @Override
+            public Set<Entry<String, String>> entrySet() {
+                return Set.of(entry);
+            }
+        };
+
+        var builder = BulkMutationTest_BatchBuilder.builder().putAllEntries(values);
+        assertThat(builder.getEntries()).containsExactlyEntriesOf(Map.of("key", "observed"));
     }
 
     @Test

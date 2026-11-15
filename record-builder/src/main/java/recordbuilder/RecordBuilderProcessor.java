@@ -465,15 +465,16 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         TypeName bufferType = ParameterizedTypeName.get(ClassName.get(ArrayList.class), entryType);
         builder.addStatement("var pending = new $T()", bufferType);
         builder.beginControlFlow("for (var entry : values.entrySet())");
-
+        builder.addStatement("var key = entry.getKey()");
         if (!isNullable(keyType)) {
-            builder.addStatement("$T.requireNonNull(entry.getKey(), $S)", Objects.class, "key cannot be null");
+            builder.addStatement("$T.requireNonNull(key, $S)", Objects.class, "key cannot be null");
         }
+        builder.addStatement("var value = entry.getValue()");
         if (!isNullable(valueType)) {
-            builder.addStatement("$T.requireNonNull(entry.getValue(), $S)", Objects.class, "value cannot be null");
+            builder.addStatement("$T.requireNonNull(value, $S)", Objects.class, "value cannot be null");
         }
 
-        builder.addStatement("pending.add(new $T<>(entry))", AbstractMap.SimpleImmutableEntry.class)
+        builder.addStatement("pending.add(new $T<>(key, value))", AbstractMap.SimpleImmutableEntry.class)
                 .endControlFlow();
 
         var implClass = getMapImplClass(component).orElseThrow();
