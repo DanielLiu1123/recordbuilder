@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -660,23 +661,18 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 // If primitive, no null check needed
                 methodBuilder.addStatement("this.$L(other.$L())", setterName, fieldName);
             } else {
-                // For reference types, check null before setting
+                String valueName = "value_" + fieldName;
+                String methodName = setterName;
                 if (isCollection(component)) {
-                    methodBuilder
-                            .beginControlFlow("if (other.$L() != null)", fieldName)
-                            .addStatement("this.$L(other.$L())", allAllName, fieldName)
-                            .endControlFlow();
+                    methodName = allAllName;
                 } else if (isMap(component)) {
-                    methodBuilder
-                            .beginControlFlow("if (other.$L() != null)", fieldName)
-                            .addStatement("this.$L(other.$L())", putAllName, fieldName)
-                            .endControlFlow();
-                } else {
-                    methodBuilder
-                            .beginControlFlow("if (other.$L() != null)", fieldName)
-                            .addStatement("this.$L(other.$L())", setterName, fieldName)
-                            .endControlFlow();
+                    methodName = putAllName;
                 }
+                methodBuilder
+                        .addStatement("var $L = other.$L()", valueName, fieldName)
+                        .beginControlFlow("if ($L != null)", valueName)
+                        .addStatement("this.$L($L)", methodName, valueName)
+                        .endControlFlow();
             }
         }
 
@@ -689,7 +685,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         if (str == null || str.isEmpty()) {
             return str;
         }
-        return str.substring(0, 1).toUpperCase() + str.substring(1);
+        return str.substring(0, 1).toUpperCase(Locale.ROOT) + str.substring(1);
     }
 
     private static Optional<Class<?>> getCollectionImplClass(RecordComponentElement component) {
@@ -795,7 +791,13 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 // Reconstruct the parameterized type
                 TypeElement typeElement = (TypeElement) declaredType.asElement();
                 ClassName rawType = ClassName.get(typeElement);
-                typeName = ParameterizedTypeName.get(rawType, typeArgumentNames);
+                TypeMirror enclosingType = declaredType.getEnclosingType();
+                if (enclosingType.getKind() == TypeKind.DECLARED
+                        && getTypeNameWithAnnotations(enclosingType) instanceof ParameterizedTypeName owner) {
+                    typeName = owner.nestedClass(rawType.simpleName(), List.of(typeArgumentNames));
+                } else {
+                    typeName = ParameterizedTypeName.get(rawType, typeArgumentNames);
+                }
             } else {
                 typeName = TypeName.get(type);
             }

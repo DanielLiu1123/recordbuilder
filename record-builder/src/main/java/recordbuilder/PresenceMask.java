@@ -8,7 +8,7 @@ import javax.lang.model.element.Modifier;
 
 /** Generates the field and bit operations that track which Builder properties have been set. */
 final class PresenceMask {
-    private static final String FIELD_NAME = "_presenceMask0_";
+    private static final String FIELD_NAME = "presenceMask";
 
     private final int fieldCount;
 

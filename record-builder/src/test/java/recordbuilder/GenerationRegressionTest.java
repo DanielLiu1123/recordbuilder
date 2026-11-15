@@ -17,6 +17,70 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class GenerationRegressionTest {
+    @Test
+    void componentNameDoesNotCollideWithPresenceMask() {
+        CompilationSubject.assertThat(compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder public record Sample(int presenceMask0_, int presenceMask) {}
+                """)).succeeded();
+    }
+
+    @Test
+    void generatedMethodNamesAreIndependentOfDefaultLocale() throws IOException {
+        var previous = java.util.Locale.getDefault();
+        try {
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"));
+            Compilation compilation = compile("Sample", """
+                    package test;
+                    @recordbuilder.RecordBuilder public record Sample(int id) {}
+                    """);
+            CompilationSubject.assertThat(compilation).succeeded();
+            assertThat(compilation
+                            .generatedSourceFile("test.SampleBuilder")
+                            .orElseThrow()
+                            .getCharContent(true)
+                            .toString())
+                    .contains("setId(", "getId(", "hasId(", "clearId(");
+        } finally {
+            java.util.Locale.setDefault(previous);
+        }
+    }
+
+    @Test
+    void mergeReadsReferenceAccessorsOnce() throws Exception {
+        Compilation compilation = compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder public record Sample(String name, java.util.List<String> items,
+                        java.util.Map<String, String> entries) {
+                    static int names, lists, maps;
+                    public String name() { return ++names == 1 ? name : null; }
+                    public java.util.List<String> items() { return ++lists == 1 ? items : null; }
+                    public java.util.Map<String, String> entries() { return ++maps == 1 ? entries : null; }
+                    public static boolean verify() {
+                        var source = new Sample("name", java.util.List.of("item"), java.util.Map.of("key", "value"));
+                        var builder = SampleBuilder.builder(source);
+                        return names == 1 && lists == 1 && maps == 1
+                                && builder.getName().equals("name")
+                                && builder.getItems().equals(java.util.List.of("item"))
+                                && builder.getEntries().equals(java.util.Map.of("key", "value"));
+                    }
+                }
+                """);
+        CompilationSubject.assertThat(compilation).succeeded();
+        assertThat(loadClass(compilation, "test.Sample").getMethod("verify").invoke(null))
+                .isEqualTo(true);
+    }
+
+    @Test
+    void parameterizedEnclosingTypesCompile() {
+        CompilationSubject.assertThat(compile("Sample", """
+                package test;
+                class Outer<T> { class Inner<U> {} }
+                @recordbuilder.RecordBuilder
+                public record Sample(Outer<String>.Inner<Integer> value) {}
+                """)).succeeded();
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {0, 1, 31, 32, 33, 63, 64, 65, 129})
     void presenceBitsRemainIndependentAcrossWordBoundaries(int count) throws Exception {
