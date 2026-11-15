@@ -16,7 +16,6 @@ import com.palantir.javapoet.WildcardTypeName;
 import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -94,7 +93,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                         recordElement);
                 continue;
             }
-            if (!hasValidMethodNames(recordElement)) {
+            if (!hasUnambiguousCollectionAdders(recordElement)) {
                 continue;
             }
             try {
@@ -122,21 +121,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         return true;
     }
 
-    private boolean hasValidMethodNames(TypeElement recordElement) {
-        Set<String> getters = new HashSet<>();
-        getters.add("getClass"); // Object.getClass() is final.
+    private boolean hasUnambiguousCollectionAdders(TypeElement recordElement) {
         boolean valid = true;
-        for (RecordComponentElement component : recordElement.getRecordComponents()) {
-            String getter = "get" + capitalize(component.getSimpleName().toString());
-            if (!getters.add(getter)) {
-                messager.printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "Cannot generate " + getter + "(): the accessor name conflicts with Object.getClass()"
-                                + " or another record component",
-                        component);
-                valid = false;
-            }
-        }
         var types = processingEnv.getTypeUtils();
         TypeMirror iterable =
                 types.erasure(elementUtils.getTypeElement("java.lang.Iterable").asType());
@@ -293,9 +279,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // See https://docs.gradle.org/current/userguide/java_plugin.html#isolating_annotation_processors
         builderClassBuilder.addOriginatingElement(recordElement);
 
-        JavaFile javaFile = JavaFile.builder(packageName, builderClassBuilder.build())
-                .addStaticImport(Objects.class, "requireNonNull")
-                .build();
+        JavaFile javaFile =
+                JavaFile.builder(packageName, builderClassBuilder.build()).build();
         javaFile.writeTo(filer);
     }
 

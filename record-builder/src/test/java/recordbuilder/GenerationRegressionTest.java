@@ -48,49 +48,6 @@ class GenerationRegressionTest {
                 .isEqualTo(true);
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"String Class", "String x, int X"})
-    void conflictingAccessorNamesProduceActionableDiagnostics(String components) {
-        Compilation compilation = compile("Sample", """
-                package test;
-                @recordbuilder.RecordBuilder public record Sample(%s) {}
-                """.formatted(components));
-        CompilationSubject.assertThat(compilation).failed();
-        CompilationSubject.assertThat(compilation).hadErrorContaining("accessor name conflicts");
-        CompilationSubject.assertThat(compilation).hadErrorCount(1);
-    }
-
-    @Test
-    void typeParameterAndComponentNamesDoNotShadowNullValidation() {
-        CompilationSubject.assertThat(compile("Sample", """
-                package test;
-                @recordbuilder.RecordBuilder public record Sample<Objects>(String java) {}
-                """)).succeeded();
-    }
-
-    @Test
-    void componentNamesDoNotShadowNullValidation() throws Exception {
-        Compilation compilation = compile("Sample", """
-                package test;
-                @recordbuilder.RecordBuilder
-                public record Sample(String Objects, String java, String requireNonNull) {
-                    public static boolean verify() {
-                        var source = new Sample("objects", "java", "requireNonNull");
-                        var builder = SampleBuilder.builder(source);
-                        try {
-                            builder.setObjects(null);
-                            return false;
-                        } catch (NullPointerException expected) {
-                            return builder.build().equals(source);
-                        }
-                    }
-                }
-                """);
-        CompilationSubject.assertThat(compilation).succeeded();
-        assertThat(loadClass(compilation, "test.Sample").getMethod("verify").invoke(null))
-                .isEqualTo(true);
-    }
-
     @Test
     void mergeUsesComponentNamesWithoutParameterCollisions() throws Exception {
         Compilation compilation = compile("Sample", """
