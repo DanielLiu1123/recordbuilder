@@ -858,8 +858,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .returns(String.class);
 
         // Use StringJoiner for cleaner code
-        methodBuilder.addStatement(
-                "$T joiner = new $T($S, $S, $S)", StringJoiner.class, StringJoiner.class, ", ", builderName + "{", "}");
+        methodBuilder.addStatement("var joiner = new $T($S, $S, $S)", StringJoiner.class, ", ", builderName + "{", "}");
 
         // For each field, check if it's set before adding to toString
         for (RecordComponentElement component : components) {
