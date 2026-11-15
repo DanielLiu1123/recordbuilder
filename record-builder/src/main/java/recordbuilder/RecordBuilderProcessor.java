@@ -15,7 +15,6 @@ import com.palantir.javapoet.WildcardTypeName;
 import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -50,8 +49,6 @@ import javax.tools.Diagnostic;
  * @author Freeman
  */
 public final class RecordBuilderProcessor extends AbstractProcessor {
-
-    private static final String PRESENCE_MASK_FIELD = "_presenceMask0_";
 
     private static final Map<String, String> collectionTypeMappings = getCollectionTypeMappings();
     private static final Map<String, String> mapTypeMappings = getMapTypeMappings();
@@ -170,22 +167,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builderClassBuilder.addField(fieldBuilder.build());
         }
 
-        // Add bitmap field to track which fields have been set.
-        // Use int for <= 32 fields, long for <= 64 fields, long[] for > 64 fields
-        int fieldCount = components.size();
-        if (fieldCount <= 32) {
-            builderClassBuilder.addField(FieldSpec.builder(int.class, "_presenceMask0_", Modifier.PRIVATE)
-                    .build());
-        } else if (fieldCount <= 64) {
-            builderClassBuilder.addField(FieldSpec.builder(long.class, "_presenceMask0_", Modifier.PRIVATE)
-                    .build());
-        } else {
-            // For > 64 fields, use long array
-            int arraySize = (fieldCount + 63) / 64; // ceil(fieldCount / 64)
-            builderClassBuilder.addField(FieldSpec.builder(long[].class, "_presenceMask0_", Modifier.PRIVATE)
-                    .initializer("new long[$L]", arraySize)
-                    .build());
-        }
+        var presenceMask = new PresenceMask(components.size());
+        builderClassBuilder.addField(presenceMask.field());
 
         // Add private constructor
         builderClassBuilder.addMethod(
@@ -206,20 +189,20 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         for (int i = 0; i < components.size(); i++) {
             RecordComponentElement component = components.get(i);
             if (isCollection(component)) {
-                builderClassBuilder.addMethod(generateAddMethod(builderTypeName, component, i, components.size()));
-                builderClassBuilder.addMethod(generateAddAllMethod(builderTypeName, component, i, components.size()));
+                builderClassBuilder.addMethod(generateAddMethod(builderTypeName, component, i, presenceMask));
+                builderClassBuilder.addMethod(generateAddAllMethod(builderTypeName, component, i, presenceMask));
             } else if (isMap(component)) {
-                builderClassBuilder.addMethod(generatePutMethod(builderTypeName, component, i, components.size()));
-                builderClassBuilder.addMethod(generatePutAllMethod(builderTypeName, component, i, components.size()));
+                builderClassBuilder.addMethod(generatePutMethod(builderTypeName, component, i, presenceMask));
+                builderClassBuilder.addMethod(generatePutAllMethod(builderTypeName, component, i, presenceMask));
             } else {
-                builderClassBuilder.addMethod(generateSetterMethod(builderTypeName, component, i, components.size()));
+                builderClassBuilder.addMethod(generateSetterMethod(builderTypeName, component, i, presenceMask));
             }
         }
 
         // Add hasXxx() methods for all fields
         for (int i = 0; i < components.size(); i++) {
             RecordComponentElement component = components.get(i);
-            builderClassBuilder.addMethod(generateHasMethod(component, i, components.size()));
+            builderClassBuilder.addMethod(generateHasMethod(component, i, presenceMask));
         }
 
         // Add getter methods for all fields
@@ -230,11 +213,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // Add clear methods for all fields
         for (int i = 0; i < components.size(); i++) {
             RecordComponentElement component = components.get(i);
-            builderClassBuilder.addMethod(generateClearMethod(builderTypeName, component, i, components.size()));
+            builderClassBuilder.addMethod(generateClearMethod(builderTypeName, component, i, presenceMask));
         }
 
         // Add clear() method to clear all fields
-        builderClassBuilder.addMethod(generateClearAllMethod(builderTypeName, components));
+        builderClassBuilder.addMethod(generateClearAllMethod(builderTypeName, components, presenceMask));
 
         // Add build() method
         builderClassBuilder.addMethod(generateBuildMethod(recordTypeName, components));
@@ -280,7 +263,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generateSetterMethod(
-            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, PresenceMask presenceMask) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "set" + capitalize(fieldName);
         TypeName fieldType = getTypeNameWithAnnotations(component.asType());
@@ -296,7 +279,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         builder.addStatement("this._$L = $L", fieldName, fieldName);
 
-        return builder.addStatement(generateSetBitStatement(fieldIndex, totalFields))
+        return builder.addStatement(presenceMask.setBit(fieldIndex))
                 .addStatement("return this")
                 .build();
     }
@@ -306,7 +289,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generateAddMethod(
-            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, PresenceMask presenceMask) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "add" + capitalize(fieldName);
         DeclaredType declaredType = (DeclaredType) component.asType();
@@ -330,13 +313,13 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("this._$L.add(value)", fieldName);
         }
 
-        return builder.addStatement(generateSetBitStatement(fieldIndex, totalFields))
+        return builder.addStatement(presenceMask.setBit(fieldIndex))
                 .addStatement("return this")
                 .build();
     }
 
     private MethodSpec generateAddAllMethod(
-            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, PresenceMask presenceMask) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "addAll" + capitalize(fieldName);
         DeclaredType declaredType = (DeclaredType) component.asType();
@@ -350,7 +333,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         if (isNullable(fieldType)) {
             builder.beginControlFlow("if (values == null)")
                     .addStatement("this._$L = null", fieldName)
-                    .addStatement(generateSetBitStatement(fieldIndex, totalFields))
+                    .addStatement(presenceMask.setBit(fieldIndex))
                     .addStatement("return this")
                     .endControlFlow();
         } else {
@@ -379,13 +362,13 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         }
         builder.endControlFlow();
 
-        return builder.addStatement(generateSetBitStatement(fieldIndex, totalFields))
+        return builder.addStatement(presenceMask.setBit(fieldIndex))
                 .addStatement("return this")
                 .build();
     }
 
     private MethodSpec generatePutMethod(
-            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, PresenceMask presenceMask) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "put" + capitalize(fieldName);
         DeclaredType declaredType = (DeclaredType) component.asType();
@@ -414,7 +397,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("this._$L.put(key, value)", fieldName);
         }
 
-        return builder.addStatement(generateSetBitStatement(fieldIndex, totalFields))
+        return builder.addStatement(presenceMask.setBit(fieldIndex))
                 .addStatement("return this")
                 .build();
     }
@@ -435,7 +418,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generatePutAllMethod(
-            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, PresenceMask presenceMask) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "putAll" + capitalize(fieldName);
         DeclaredType declaredType = (DeclaredType) component.asType();
@@ -450,7 +433,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         if (isNullable(fieldType)) {
             builder.beginControlFlow("if (values == null)")
                     .addStatement("this._$L = null", fieldName)
-                    .addStatement(generateSetBitStatement(fieldIndex, totalFields))
+                    .addStatement(presenceMask.setBit(fieldIndex))
                     .addStatement("return this")
                     .endControlFlow();
         } else {
@@ -487,7 +470,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         }
         builder.endControlFlow();
 
-        return builder.addStatement(generateSetBitStatement(fieldIndex, totalFields))
+        return builder.addStatement(presenceMask.setBit(fieldIndex))
                 .addStatement("return this")
                 .build();
     }
@@ -559,7 +542,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generateClearMethod(
-            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, int totalFields) {
+            TypeName builderTypeName, RecordComponentElement component, int fieldIndex, PresenceMask presenceMask) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "clear" + capitalize(fieldName);
 
@@ -576,14 +559,14 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         }
 
         // Clear the bit in bitmap
-        methodBuilder.addStatement(generateClearBitStatement(fieldIndex, totalFields));
+        methodBuilder.addStatement(presenceMask.clearBit(fieldIndex));
 
         methodBuilder.addStatement("return this");
         return methodBuilder.build();
     }
 
     private MethodSpec generateClearAllMethod(
-            TypeName builderTypeName, List<? extends RecordComponentElement> components) {
+            TypeName builderTypeName, List<? extends RecordComponentElement> components, PresenceMask presenceMask) {
         MethodSpec.Builder methodBuilder =
                 MethodSpec.methodBuilder("clear").addModifiers(Modifier.PUBLIC).returns(builderTypeName);
 
@@ -598,18 +581,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             }
         }
 
-        // Reset the presence mask
-        int fieldCount = components.size();
-        if (fieldCount > 0) {
-            if (fieldCount <= 32) {
-                methodBuilder.addStatement("this." + PRESENCE_MASK_FIELD + " = 0");
-            } else if (fieldCount <= 64) {
-                methodBuilder.addStatement("this." + PRESENCE_MASK_FIELD + " = 0L");
-            } else {
-                // Requires import of java.util.Arrays, which JavaPoet will handle
-                methodBuilder.addStatement("$T.fill(this.$L, 0L)", Arrays.class, PRESENCE_MASK_FIELD);
-            }
-        }
+        presenceMask.addResetTo(methodBuilder);
 
         methodBuilder.addStatement("return this");
 
@@ -630,11 +602,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         return methodBuilder.build();
     }
 
-    private MethodSpec generateHasMethod(RecordComponentElement component, int fieldIndex, int totalFields) {
+    private MethodSpec generateHasMethod(RecordComponentElement component, int fieldIndex, PresenceMask presenceMask) {
         String fieldName = component.getSimpleName().toString();
         String methodName = "has" + capitalize(fieldName);
 
-        CodeBlock checkBitExpression = generateCheckBitExpression(fieldIndex, totalFields);
+        CodeBlock checkBitExpression = presenceMask.isSet(fieldIndex);
 
         return MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
@@ -879,52 +851,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 elementUtils.getPackageOf(annotationType).getQualifiedName().toString();
         String simpleName = annotationType.getSimpleName().toString();
         return ClassName.get(packageName, simpleName);
-    }
-
-    private static CodeBlock generateSetBitStatement(int bitIndex, int totalFields) {
-        if (totalFields <= 32) {
-            // Use int bitmap
-            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + " |= $L", "(1 << " + bitIndex + ")");
-        } else if (totalFields <= 64) {
-            // Use long bitmap
-            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + " |= $L", "(1L << " + bitIndex + ")");
-        } else {
-            // Use long array bitmap
-            int arrayIndex = bitIndex / 64;
-            int bitOffset = bitIndex % 64;
-            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + "[$L] |= $L", arrayIndex, "(1L << " + bitOffset + ")");
-        }
-    }
-
-    private static CodeBlock generateCheckBitExpression(int bitIndex, int totalFields) {
-        if (totalFields <= 32) {
-            // Use int bitmap
-            return CodeBlock.of("(this." + PRESENCE_MASK_FIELD + " & $L) != 0", "(1 << " + bitIndex + ")");
-        } else if (totalFields <= 64) {
-            // Use long bitmap
-            return CodeBlock.of("(this." + PRESENCE_MASK_FIELD + " & $L) != 0", "(1L << " + bitIndex + ")");
-        } else {
-            // Use long array bitmap
-            int arrayIndex = bitIndex / 64;
-            int bitOffset = bitIndex % 64;
-            return CodeBlock.of(
-                    "(this." + PRESENCE_MASK_FIELD + "[$L] & $L) != 0", arrayIndex, "(1L << " + bitOffset + ")");
-        }
-    }
-
-    private static CodeBlock generateClearBitStatement(int bitIndex, int totalFields) {
-        if (totalFields <= 32) {
-            // Use int bitmap
-            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + " &= ~$L", "(1 << " + bitIndex + ")");
-        } else if (totalFields <= 64) {
-            // Use long bitmap
-            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + " &= ~$L", "(1L << " + bitIndex + ")");
-        } else {
-            // Use long array bitmap
-            int arrayIndex = bitIndex / 64;
-            int bitOffset = bitIndex % 64;
-            return CodeBlock.of("this." + PRESENCE_MASK_FIELD + "[$L] &= ~$L", arrayIndex, "(1L << " + bitOffset + ")");
-        }
     }
 
     private MethodSpec generateToStringMethod(String builderName, List<? extends RecordComponentElement> components) {
