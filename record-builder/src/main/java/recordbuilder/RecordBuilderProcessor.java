@@ -665,22 +665,16 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             }
 
             String methodPrefix = "set";
+            CodeBlock localType = CodeBlock.of("var");
             if (isCollection(component)) {
                 methodPrefix = "addAll";
                 // Match the bulk parameter type so a more specific single-element adder cannot win.
-                methodBuilder.addStatement(
-                        "$T $L = $L.$L()",
-                        getParameterTypeForCollection((DeclaredType) component.asType()),
-                        fieldName,
-                        sourceName,
-                        fieldName);
-            } else {
-                if (isMap(component)) {
-                    methodPrefix = "putAll";
-                }
-                methodBuilder.addStatement("var $L = $L.$L()", fieldName, sourceName, fieldName);
+                localType = CodeBlock.of("$T", getParameterTypeForCollection((DeclaredType) component.asType()));
+            } else if (isMap(component)) {
+                methodPrefix = "putAll";
             }
             methodBuilder
+                    .addStatement("$L $L = $L.$L()", localType, fieldName, sourceName, fieldName)
                     .beginControlFlow("if ($L != null)", fieldName)
                     .addStatement("this.$L$L($L)", methodPrefix, suffix, fieldName)
                     .endControlFlow();

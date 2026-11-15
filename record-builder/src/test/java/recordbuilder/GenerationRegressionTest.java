@@ -7,6 +7,7 @@ import com.google.testing.compile.CompilationSubject;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import java.io.IOException;
+import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -15,62 +16,52 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledForJreRange;
 import org.junit.jupiter.api.condition.JRE;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class GenerationRegressionTest {
-    @ParameterizedTest
-    @ValueSource(
-            strings = {
-                "java.util.List<java.util.List<String>>",
-                "java.util.List<java.io.Serializable>",
-                "java.util.List<? extends java.util.List<String>>",
-                "java.util.List<? super java.util.List<String>>",
-                "java.util.List<?>",
-                "java.util.List"
-            })
-    void mergeSelectsBulkAdderDespiteOverlappingNames(String collectionType) throws Exception {
+    @ParameterizedTest(name = "things: {0}, allThings: {1}")
+    @CsvSource(textBlock = """
+            java.util.ArrayList<String>, java.util.List<java.util.List<String>>
+            java.util.ArrayList<String>, java.util.List<java.io.Serializable>
+            java.util.ArrayList<String>, java.util.List<? extends java.util.List<String>>
+            java.util.ArrayList<String>, java.util.List<? super java.util.List<String>>
+            java.util.ArrayList<String>, java.util.List<?>
+            java.util.ArrayList<String>, java.util.List
+            java.util.List<? extends String>, java.util.List<java.util.List<String>>
+            java.util.List<? super String>, java.util.List<java.util.List<String>>
+            java.util.List<?>, java.util.List<java.util.List<String>>
+            java.util.List, java.util.List<java.util.List<String>>
+            """)
+    void mergeSelectsBulkAdderDespiteOverlappingNames(String thingsType, String allThingsType) throws Exception {
         Compilation compilation = compile("Sample", """
                 package test;
-                @recordbuilder.RecordBuilder public record Sample(
-                    java.util.ArrayList<String> things, %s allThings) {
-                    public static boolean verify() {
-                        var source = new Sample(
+                @recordbuilder.RecordBuilder public record Sample(%s things, %s allThings) {
+                    public static Sample source() {
+                        return new Sample(
                             new java.util.ArrayList<>(java.util.List.of("value")),
                             java.util.List.of(new java.util.ArrayList<>(java.util.List.of("nested"))));
-                        var merged = SampleBuilder.builder().addThings("existing").merge(source).build();
-                        return SampleBuilder.builder(source).build().equals(source)
-                            && merged.things().equals(java.util.List.of("existing", "value"))
-                            && merged.allThings().equals(source.allThings());
+                    }
+                    public static Sample copy() {
+                        return SampleBuilder.builder(source()).build();
+                    }
+                    public static Sample merge() {
+                        return SampleBuilder.builder().addThings("existing").merge(source()).build();
                     }
                 }
-                """.formatted(collectionType));
+                """.formatted(thingsType, allThingsType));
         CompilationSubject.assertThat(compilation).succeeded();
-        assertThat(loadClass(compilation, "test.Sample").getMethod("verify").invoke(null))
-                .isEqualTo(true);
-    }
-
-    @ParameterizedTest
-    @ValueSource(
-            strings = {
-                "java.util.List<? extends String>",
-                "java.util.List<? super String>",
-                "java.util.List<?>",
-                "java.util.List"
-            })
-    void mergeSelectsBulkAdderForWildcardAndRawCollections(String collectionType) throws Exception {
-        Compilation compilation = compile("Sample", """
-                package test;
-                @recordbuilder.RecordBuilder public record Sample(
-                    %s things, java.util.List<java.util.List<String>> allThings) {
-                    public static boolean verify() {
-                        var source = new Sample(java.util.List.of("value"), java.util.List.of(java.util.List.of("nested")));
-                        return SampleBuilder.builder(source).build().equals(source);
-                    }
-                }
-                """.formatted(collectionType));
-        CompilationSubject.assertThat(compilation).succeeded();
-        assertThat(loadClass(compilation, "test.Sample").getMethod("verify").invoke(null))
-                .isEqualTo(true);
+        Class<?> sample = loadClass(compilation, "test.Sample");
+        Object source = sample.getMethod("source").invoke(null);
+        Object copy = sample.getMethod("copy").invoke(null);
+        Object merged = sample.getMethod("merge").invoke(null);
+        assertThat(copy).as("copy preserves both components").isEqualTo(source);
+        assertThat(sample.getMethod("things").invoke(merged))
+                .as("merge appends to the existing things")
+                .isEqualTo(List.of("existing", "value"));
+        assertThat(sample.getMethod("allThings").invoke(merged))
+                .as("merge preserves allThings without adding things to it")
+                .isEqualTo(sample.getMethod("allThings").invoke(source));
     }
 
     @Test
