@@ -464,6 +464,36 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             builder.addStatement("$T.requireNonNull(values, $S)", Objects.class, "values cannot be null");
         }
 
+        var implClass = getMapImplClass(component).orElseThrow();
+        if (implClass == java.util.HashMap.class
+                || implClass == java.util.LinkedHashMap.class
+                || implClass == java.util.IdentityHashMap.class) {
+            TypeName pendingType = ParameterizedTypeName.get(
+                    ClassName.get(implClass),
+                    isWildcard(keyType) ? ClassName.get(Object.class) : keyType,
+                    isWildcard(valueType) ? ClassName.get(Object.class) : valueType);
+            builder.beginControlFlow("if (this._$L == null)", fieldName);
+            builder.addStatement("var pending = new $T()", pendingType);
+            builder.beginControlFlow("for (var entry : values.entrySet())");
+            addMapEntryValidation(builder, keyType, valueType);
+            builder.addStatement("pending.put(key, value)").endControlFlow();
+            builder.beginControlFlow("if (this._$L == null)", fieldName);
+            if (isWildcard(keyType) || isWildcard(valueType)) {
+                builder.addStatement("this._$L = ($T) pending", fieldName, implClass);
+            } else {
+                builder.addStatement("this._$L = pending", fieldName);
+            }
+            builder.nextControlFlow("else");
+            if (isWildcard(keyType) || isWildcard(valueType)) {
+                builder.addStatement("(($T) this._$L).putAll(pending)", implClass, fieldName);
+            } else {
+                builder.addStatement("this._$L.putAll(pending)", fieldName);
+            }
+            builder.endControlFlow();
+            builder.addStatement(presenceMask.setBit(fieldIndex));
+            builder.addStatement("return this").endControlFlow();
+        }
+
         // Snapshot entries so validation failures cannot leave partially written fields.
         TypeName entryType = ParameterizedTypeName.get(
                 ClassName.get(Map.Entry.class),
@@ -472,19 +502,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         TypeName bufferType = ParameterizedTypeName.get(ClassName.get(ArrayList.class), entryType);
         builder.addStatement("var pending = new $T()", bufferType);
         builder.beginControlFlow("for (var entry : values.entrySet())");
-        builder.addStatement("var key = entry.getKey()");
-        if (!isNullable(keyType)) {
-            builder.addStatement("$T.requireNonNull(key, $S)", Objects.class, "key cannot be null");
-        }
-        builder.addStatement("var value = entry.getValue()");
-        if (!isNullable(valueType)) {
-            builder.addStatement("$T.requireNonNull(value, $S)", Objects.class, "value cannot be null");
-        }
+        addMapEntryValidation(builder, keyType, valueType);
 
         builder.addStatement("pending.add(new $T<>(key, value))", AbstractMap.SimpleImmutableEntry.class)
                 .endControlFlow();
 
-        var implClass = getMapImplClass(component).orElseThrow();
         builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
         builder.beginControlFlow("for (var entry : pending)");
         if (isWildcard(keyType) || isWildcard(valueType)) {
@@ -497,6 +519,17 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         return builder.addStatement(presenceMask.setBit(fieldIndex))
                 .addStatement("return this")
                 .build();
+    }
+
+    private static void addMapEntryValidation(MethodSpec.Builder builder, TypeName keyType, TypeName valueType) {
+        builder.addStatement("var key = entry.getKey()");
+        if (!isNullable(keyType)) {
+            builder.addStatement("$T.requireNonNull(key, $S)", Objects.class, "key cannot be null");
+        }
+        builder.addStatement("var value = entry.getValue()");
+        if (!isNullable(valueType)) {
+            builder.addStatement("$T.requireNonNull(value, $S)", Objects.class, "value cannot be null");
+        }
     }
 
     private TypeName getTypeArgument(DeclaredType declaredType, int index) {

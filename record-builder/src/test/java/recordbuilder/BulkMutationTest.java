@@ -21,6 +21,115 @@ class BulkMutationTest {
     @RecordBuilder
     record ConcurrentBatch(CopyOnWriteArrayList<String> items) {}
 
+    @RecordBuilder
+    record Maps(
+            LinkedHashMap<String, Integer> ordered,
+            java.util.IdentityHashMap<String, Integer> identity,
+            Map<Object, String> throwing) {}
+
+    @Test
+    void initialMapsPreserveOrderIdentityAndInputIndependence() {
+        var first = new String("same");
+        var second = new String("same");
+        var identity = new java.util.IdentityHashMap<String, Integer>();
+        identity.put(first, 1);
+        identity.put(second, 2);
+        var ordered = new LinkedHashMap<String, Integer>();
+        ordered.put("z", 1);
+        ordered.put("a", 2);
+        var builder =
+                BulkMutationTest_MapsBuilder.builder().putAllOrdered(ordered).putAllIdentity(identity);
+        ordered.clear();
+        identity.clear();
+        assertThat(builder.getOrdered().keySet()).containsExactly("z", "a");
+        assertThat(builder.getIdentity()).hasSize(2);
+        assertThat(builder.getIdentity().get(first)).isEqualTo(1);
+        assertThat(builder.getIdentity().get(second)).isEqualTo(2);
+        var result = builder.getOrdered();
+        builder.putAllOrdered(result).putOrdered("next", 3);
+        assertThat(builder.getOrdered()).isSameAs(result);
+        assertThat(result.keySet()).containsExactly("z", "a", "next");
+    }
+
+    @Test
+    void initialMapInsertionFailureDoesNotPublishPartialState() {
+        Object key = new Object() {
+            @Override
+            public int hashCode() {
+                throw new IllegalStateException("hash failed");
+            }
+        };
+        var input = new java.util.IdentityHashMap<Object, String>();
+        input.put(key, "value");
+        var builder = BulkMutationTest_MapsBuilder.builder();
+        assertThatThrownBy(() -> builder.putAllThrowing(input)).isInstanceOf(IllegalStateException.class);
+        assertThat(builder.getThrowing()).isNull();
+        assertThat(builder.hasThrowing()).isFalse();
+    }
+
+    @Test
+    void initialBulkPutPreservesMapCreatedByInputCallback() {
+        var builder = BulkMutationTest_BatchBuilder.builder();
+        var observed = new ArrayList<Map<String, String>>();
+        var input = new AbstractMap<String, String>() {
+            @Override
+            public Set<Entry<String, String>> entrySet() {
+                builder.putEntries("side", "effect");
+                observed.add(builder.getEntries());
+                return Set.of(Map.entry("input", "value"));
+            }
+        };
+        builder.putAllEntries(input);
+        assertThat(builder.getEntries())
+                .isSameAs(observed.get(0))
+                .containsExactlyInAnyOrderEntriesOf(Map.of("side", "effect", "input", "value"));
+    }
+
+    @Test
+    void mapIterationFailurePreservesUnsetAndExistingFields() {
+        var input = new AbstractMap<String, String>() {
+            @Override
+            public Set<Entry<String, String>> entrySet() {
+                return new java.util.AbstractSet<>() {
+                    @Override
+                    public int size() {
+                        return 2;
+                    }
+
+                    @Override
+                    public Iterator<Entry<String, String>> iterator() {
+                        return new Iterator<>() {
+                            private boolean first = true;
+
+                            @Override
+                            public boolean hasNext() {
+                                return true;
+                            }
+
+                            @Override
+                            public Entry<String, String> next() {
+                                if (first) {
+                                    first = false;
+                                    return Map.entry("valid", "value");
+                                }
+                                throw new IllegalStateException("iteration failed");
+                            }
+                        };
+                    }
+                };
+            }
+        };
+        var builder = BulkMutationTest_BatchBuilder.builder();
+        assertThatThrownBy(() -> builder.putAllEntries(input)).isInstanceOf(IllegalStateException.class);
+        assertThat(builder.getEntries()).isNull();
+        assertThat(builder.hasEntries()).isFalse();
+        builder.putEntries("existing", "original");
+        var entries = builder.getEntries();
+        assertThatThrownBy(() -> builder.putAllEntries(input)).isInstanceOf(IllegalStateException.class);
+        assertThat(builder.getEntries()).isSameAs(entries).containsExactlyEntriesOf(Map.of("existing", "original"));
+        assertThat(builder.hasEntries()).isTrue();
+    }
+
     @Test
     void copyOnWriteBulkAppendPreservesReferencesAndValidatesBeforeWriting() {
         var builder = BulkMutationTest_ConcurrentBatchBuilder.builder().addItems("existing");
