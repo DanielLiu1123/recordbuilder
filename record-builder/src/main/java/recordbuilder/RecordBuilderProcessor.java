@@ -7,6 +7,7 @@ import com.palantir.javapoet.CodeBlock;
 import com.palantir.javapoet.FieldSpec;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.MethodSpec;
+import com.palantir.javapoet.NameAllocator;
 import com.palantir.javapoet.ParameterizedTypeName;
 import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
@@ -16,6 +17,7 @@ import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -643,41 +645,36 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
     private MethodSpec generateMergeMethod(
             TypeName recordTypeName, TypeName builderTypeName, List<? extends RecordComponentElement> components) {
+        var names = new NameAllocator();
+        for (RecordComponentElement component : components) {
+            names.newName(component.getSimpleName().toString());
+        }
+        String sourceName = names.newName("other");
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("merge")
                 .addModifiers(Modifier.PUBLIC)
                 .returns(builderTypeName)
-                .addParameter(recordTypeName, "other")
-                .addStatement("$T.requireNonNull(other, \"other cannot be null\")", Objects.class);
+                .addParameter(recordTypeName, sourceName)
+                .addStatement("$T.requireNonNull($L, $S)", Objects.class, sourceName, "other cannot be null");
 
         for (RecordComponentElement component : components) {
             String fieldName = component.getSimpleName().toString();
-            String setterName = "set" + capitalize(fieldName);
-            String allAllName = "addAll" + capitalize(fieldName);
-            String putAllName = "putAll" + capitalize(fieldName);
-
-            // Use setter method for all fields
+            String suffix = capitalize(fieldName);
             if (isPrimitive(component)) {
-                // If primitive, no null check needed
-                methodBuilder.addStatement("this.$L(other.$L())", setterName, fieldName);
-            } else {
-                // For reference types, check null before setting
-                if (isCollection(component)) {
-                    methodBuilder
-                            .beginControlFlow("if (other.$L() != null)", fieldName)
-                            .addStatement("this.$L(other.$L())", allAllName, fieldName)
-                            .endControlFlow();
-                } else if (isMap(component)) {
-                    methodBuilder
-                            .beginControlFlow("if (other.$L() != null)", fieldName)
-                            .addStatement("this.$L(other.$L())", putAllName, fieldName)
-                            .endControlFlow();
-                } else {
-                    methodBuilder
-                            .beginControlFlow("if (other.$L() != null)", fieldName)
-                            .addStatement("this.$L(other.$L())", setterName, fieldName)
-                            .endControlFlow();
-                }
+                methodBuilder.addStatement("this.set$L($L.$L())", suffix, sourceName, fieldName);
+                continue;
             }
+
+            String methodPrefix = "set";
+            if (isCollection(component)) {
+                methodPrefix = "addAll";
+            } else if (isMap(component)) {
+                methodPrefix = "putAll";
+            }
+            methodBuilder
+                    .addStatement("var $L = $L.$L()", fieldName, sourceName, fieldName)
+                    .beginControlFlow("if ($L != null)", fieldName)
+                    .addStatement("this.$L$L($L)", methodPrefix, suffix, fieldName)
+                    .endControlFlow();
         }
 
         methodBuilder.addStatement("return this");
@@ -689,7 +686,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         if (str == null || str.isEmpty()) {
             return str;
         }
-        return str.substring(0, 1).toUpperCase() + str.substring(1);
+        return str.substring(0, 1).toUpperCase(Locale.ROOT) + str.substring(1);
     }
 
     private static Optional<Class<?>> getCollectionImplClass(RecordComponentElement component) {
@@ -782,23 +779,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         // Recursively handle parameterized types to preserve nested annotations
         if (type.getKind() == TypeKind.DECLARED) {
-            DeclaredType declaredType = (DeclaredType) type;
-            var typeArguments = declaredType.getTypeArguments();
-
-            if (!typeArguments.isEmpty()) {
-                // Recursively process each type argument
-                TypeName[] typeArgumentNames = new TypeName[typeArguments.size()];
-                for (int i = 0; i < typeArguments.size(); i++) {
-                    typeArgumentNames[i] = getTypeNameWithAnnotations(typeArguments.get(i));
-                }
-
-                // Reconstruct the parameterized type
-                TypeElement typeElement = (TypeElement) declaredType.asElement();
-                ClassName rawType = ClassName.get(typeElement);
-                typeName = ParameterizedTypeName.get(rawType, typeArgumentNames);
-            } else {
-                typeName = TypeName.get(type);
-            }
+            typeName = getDeclaredTypeName((DeclaredType) type);
         } else if (type.getKind() == TypeKind.ARRAY) {
             ArrayType arrayType = (ArrayType) type;
             TypeName componentTypeName = getTypeNameWithAnnotations(arrayType.getComponentType());
@@ -828,6 +809,23 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         } else {
             return typeName;
         }
+    }
+
+    private TypeName getDeclaredTypeName(DeclaredType type) {
+        if (type.getTypeArguments().isEmpty()) {
+            return TypeName.get(type);
+        }
+
+        List<TypeName> arguments = type.getTypeArguments().stream()
+                .map(this::getTypeNameWithAnnotations)
+                .toList();
+        ClassName rawType = ClassName.get((TypeElement) type.asElement());
+        TypeMirror enclosingType = type.getEnclosingType();
+        if (enclosingType.getKind() == TypeKind.DECLARED
+                && getTypeNameWithAnnotations(enclosingType) instanceof ParameterizedTypeName owner) {
+            return owner.nestedClass(rawType.simpleName(), arguments);
+        }
+        return ParameterizedTypeName.get(rawType, arguments.toArray(TypeName[]::new));
     }
 
     /**
@@ -860,8 +858,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .returns(String.class);
 
         // Use StringJoiner for cleaner code
-        methodBuilder.addStatement(
-                "$T joiner = new $T($S, $S, $S)", StringJoiner.class, StringJoiner.class, ", ", builderName + "{", "}");
+        methodBuilder.addStatement("var joiner = new $T($S, $S, $S)", StringJoiner.class, ", ", builderName + "{", "}");
 
         // For each field, check if it's set before adding to toString
         for (RecordComponentElement component : components) {

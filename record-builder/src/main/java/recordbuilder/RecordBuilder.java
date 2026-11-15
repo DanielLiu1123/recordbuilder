@@ -37,7 +37,7 @@ import java.lang.annotation.Target;
  *     private List<String> _roles;
  *     private Map<String, String> _attributes;
  *
- *     private int _presenceMask0_;
+ *     private int presenceMask;
  *
  *     private UserBuilder() {}
  *
