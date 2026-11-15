@@ -7,6 +7,7 @@ import com.google.testing.compile.CompilationSubject;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import java.io.IOException;
+import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import javax.tools.StandardLocation;
@@ -52,9 +53,9 @@ class GenerationRegressionTest {
 
     @Test
     void generatedMethodNamesAreIndependentOfDefaultLocale() throws IOException {
-        var previous = java.util.Locale.getDefault();
+        var previous = Locale.getDefault();
         try {
-            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"));
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"));
             Compilation compilation = compile("Sample", """
                     package test;
                     @recordbuilder.RecordBuilder public record Sample(int id) {}
@@ -67,7 +68,7 @@ class GenerationRegressionTest {
                             .toString())
                     .contains("setId(", "getId(", "hasId(", "clearId(");
         } finally {
-            java.util.Locale.setDefault(previous);
+            Locale.setDefault(previous);
         }
     }
 
