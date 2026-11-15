@@ -19,16 +19,75 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class GenerationRegressionTest {
     @ParameterizedTest
-    @ValueSource(strings = {"java.util.List<String>", "Iterable<String>", "java.io.Serializable"})
-    void conflictingBulkAdderOverloadsProduceActionableDiagnostics(String elementType) {
+    @ValueSource(
+            strings = {
+                "java.util.List<java.util.List<String>>",
+                "java.util.List<java.io.Serializable>",
+                "java.util.List<? extends java.util.List<String>>",
+                "java.util.List<? super java.util.List<String>>",
+                "java.util.List<?>",
+                "java.util.List"
+            })
+    void mergeSelectsBulkAdderDespiteOverlappingNames(String collectionType) throws Exception {
         Compilation compilation = compile("Sample", """
                 package test;
                 @recordbuilder.RecordBuilder public record Sample(
-                    java.util.ArrayList<String> things, java.util.List<%s> allThings) {}
-                """.formatted(elementType));
-        CompilationSubject.assertThat(compilation).failed();
-        CompilationSubject.assertThat(compilation).hadErrorContaining("bulk method conflicts");
-        CompilationSubject.assertThat(compilation).hadErrorCount(1);
+                    java.util.ArrayList<String> things, %s allThings) {
+                    public static boolean verify() {
+                        var source = new Sample(
+                            new java.util.ArrayList<>(java.util.List.of("value")),
+                            java.util.List.of(new java.util.ArrayList<>(java.util.List.of("nested"))));
+                        var merged = SampleBuilder.builder().addThings("existing").merge(source).build();
+                        return SampleBuilder.builder(source).build().equals(source)
+                            && merged.things().equals(java.util.List.of("existing", "value"))
+                            && merged.allThings().equals(source.allThings());
+                    }
+                }
+                """.formatted(collectionType));
+        CompilationSubject.assertThat(compilation).succeeded();
+        assertThat(loadClass(compilation, "test.Sample").getMethod("verify").invoke(null))
+                .isEqualTo(true);
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "java.util.List<? extends String>",
+                "java.util.List<? super String>",
+                "java.util.List<?>",
+                "java.util.List"
+            })
+    void mergeSelectsBulkAdderForWildcardAndRawCollections(String collectionType) throws Exception {
+        Compilation compilation = compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder public record Sample(
+                    %s things, java.util.List<java.util.List<String>> allThings) {
+                    public static boolean verify() {
+                        var source = new Sample(java.util.List.of("value"), java.util.List.of(java.util.List.of("nested")));
+                        return SampleBuilder.builder(source).build().equals(source);
+                    }
+                }
+                """.formatted(collectionType));
+        CompilationSubject.assertThat(compilation).succeeded();
+        assertThat(loadClass(compilation, "test.Sample").getMethod("verify").invoke(null))
+                .isEqualTo(true);
+    }
+
+    @Test
+    void mergeSelectsBulkAdderForGenericComponents() throws Exception {
+        Compilation compilation = compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder public record Sample<T>(
+                    java.util.List<T> things, java.util.List<java.util.List<T>> allThings) {
+                    public static boolean verify() {
+                        var source = new Sample<>(java.util.List.of("value"), java.util.List.of(java.util.List.of("nested")));
+                        return SampleBuilder.builder(source).build().equals(source);
+                    }
+                }
+                """);
+        CompilationSubject.assertThat(compilation).succeeded();
+        assertThat(loadClass(compilation, "test.Sample").getMethod("verify").invoke(null))
+                .isEqualTo(true);
     }
 
     @Test

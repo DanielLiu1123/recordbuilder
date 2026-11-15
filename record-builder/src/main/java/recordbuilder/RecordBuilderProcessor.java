@@ -93,9 +93,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                         recordElement);
                 continue;
             }
-            if (!hasUnambiguousCollectionAdders(recordElement)) {
-                continue;
-            }
             try {
                 generateBuilder(recordElement);
             } catch (FilerException e) {
@@ -119,51 +116,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             }
         }
         return true;
-    }
-
-    private boolean hasUnambiguousCollectionAdders(TypeElement recordElement) {
-        boolean valid = true;
-        var types = processingEnv.getTypeUtils();
-        TypeMirror iterable =
-                types.erasure(elementUtils.getTypeElement("java.lang.Iterable").asType());
-        for (RecordComponentElement component : recordElement.getRecordComponents()) {
-            if (!isCollection(component)) {
-                continue;
-            }
-            String bulkName = "addAll" + capitalize(component.getSimpleName().toString());
-            for (RecordComponentElement candidate : recordElement.getRecordComponents()) {
-                if (!isCollection(candidate)
-                        || !bulkName.equals(
-                                "add" + capitalize(candidate.getSimpleName().toString()))) {
-                    continue;
-                }
-                var arguments = ((DeclaredType) candidate.asType()).getTypeArguments();
-                if (arguments.isEmpty()) {
-                    continue;
-                }
-                TypeMirror elementType = arguments.get(0);
-                if (elementType instanceof WildcardType wildcard) {
-                    elementType =
-                            wildcard.getSuperBound() != null ? wildcard.getSuperBound() : wildcard.getExtendsBound();
-                }
-                if (elementType == null) {
-                    continue;
-                }
-                TypeMirror erasedElement = types.erasure(elementType);
-                if (types.isSameType(erasedElement, iterable)
-                        || (!types.isAssignable(iterable, erasedElement)
-                                && types.isAssignable(component.asType(), elementType))) {
-                    messager.printMessage(
-                            Diagnostic.Kind.ERROR,
-                            "Cannot generate " + bulkName
-                                    + "(): the bulk method conflicts with the adder for "
-                                    + candidate.getSimpleName(),
-                            component);
-                    valid = false;
-                }
-            }
-        }
-        return valid;
     }
 
     private static String builderName(TypeElement recordElement) {
@@ -715,11 +667,20 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             String methodPrefix = "set";
             if (isCollection(component)) {
                 methodPrefix = "addAll";
-            } else if (isMap(component)) {
-                methodPrefix = "putAll";
+                // Match the bulk parameter type so a more specific single-element adder cannot win.
+                methodBuilder.addStatement(
+                        "$T $L = $L.$L()",
+                        getParameterTypeForCollection((DeclaredType) component.asType()),
+                        fieldName,
+                        sourceName,
+                        fieldName);
+            } else {
+                if (isMap(component)) {
+                    methodPrefix = "putAll";
+                }
+                methodBuilder.addStatement("var $L = $L.$L()", fieldName, sourceName, fieldName);
             }
             methodBuilder
-                    .addStatement("var $L = $L.$L()", fieldName, sourceName, fieldName)
                     .beginControlFlow("if ($L != null)", fieldName)
                     .addStatement("this.$L$L($L)", methodPrefix, suffix, fieldName)
                     .endControlFlow();
