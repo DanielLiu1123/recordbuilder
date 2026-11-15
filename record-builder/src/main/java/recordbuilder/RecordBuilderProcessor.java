@@ -16,6 +16,7 @@ import com.palantir.javapoet.WildcardTypeName;
 import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -93,6 +94,9 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                         recordElement);
                 continue;
             }
+            if (!hasValidMethodNames(recordElement)) {
+                continue;
+            }
             try {
                 generateBuilder(recordElement);
             } catch (FilerException e) {
@@ -116,6 +120,64 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             }
         }
         return true;
+    }
+
+    private boolean hasValidMethodNames(TypeElement recordElement) {
+        Set<String> getters = new HashSet<>();
+        getters.add("getClass"); // Object.getClass() is final.
+        boolean valid = true;
+        for (RecordComponentElement component : recordElement.getRecordComponents()) {
+            String getter = "get" + capitalize(component.getSimpleName().toString());
+            if (!getters.add(getter)) {
+                messager.printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "Cannot generate " + getter + "(): the accessor name conflicts with Object.getClass()"
+                                + " or another record component",
+                        component);
+                valid = false;
+            }
+        }
+        var types = processingEnv.getTypeUtils();
+        TypeMirror iterable =
+                types.erasure(elementUtils.getTypeElement("java.lang.Iterable").asType());
+        for (RecordComponentElement component : recordElement.getRecordComponents()) {
+            if (!isCollection(component)) {
+                continue;
+            }
+            String bulkName = "addAll" + capitalize(component.getSimpleName().toString());
+            for (RecordComponentElement candidate : recordElement.getRecordComponents()) {
+                if (!isCollection(candidate)
+                        || !bulkName.equals(
+                                "add" + capitalize(candidate.getSimpleName().toString()))) {
+                    continue;
+                }
+                var arguments = ((DeclaredType) candidate.asType()).getTypeArguments();
+                if (arguments.isEmpty()) {
+                    continue;
+                }
+                TypeMirror elementType = arguments.get(0);
+                if (elementType instanceof WildcardType wildcard) {
+                    elementType =
+                            wildcard.getSuperBound() != null ? wildcard.getSuperBound() : wildcard.getExtendsBound();
+                }
+                if (elementType == null) {
+                    continue;
+                }
+                TypeMirror erasedElement = types.erasure(elementType);
+                if (types.isSameType(erasedElement, iterable)
+                        || (!types.isAssignable(iterable, erasedElement)
+                                && types.isAssignable(component.asType(), elementType))) {
+                    messager.printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "Cannot generate " + bulkName
+                                    + "(): the bulk method conflicts with the adder for "
+                                    + candidate.getSimpleName(),
+                            component);
+                    valid = false;
+                }
+            }
+        }
+        return valid;
     }
 
     private static String builderName(TypeElement recordElement) {
@@ -231,8 +293,9 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // See https://docs.gradle.org/current/userguide/java_plugin.html#isolating_annotation_processors
         builderClassBuilder.addOriginatingElement(recordElement);
 
-        JavaFile javaFile =
-                JavaFile.builder(packageName, builderClassBuilder.build()).build();
+        JavaFile javaFile = JavaFile.builder(packageName, builderClassBuilder.build())
+                .addStaticImport(Objects.class, "requireNonNull")
+                .build();
         javaFile.writeTo(filer);
     }
 

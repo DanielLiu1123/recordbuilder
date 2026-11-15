@@ -18,6 +18,79 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class GenerationRegressionTest {
+    @ParameterizedTest
+    @ValueSource(strings = {"java.util.List<String>", "Iterable<String>", "java.io.Serializable"})
+    void conflictingBulkAdderOverloadsProduceActionableDiagnostics(String elementType) {
+        Compilation compilation = compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder public record Sample(
+                    java.util.ArrayList<String> things, java.util.List<%s> allThings) {}
+                """.formatted(elementType));
+        CompilationSubject.assertThat(compilation).failed();
+        CompilationSubject.assertThat(compilation).hadErrorContaining("bulk method conflicts");
+        CompilationSubject.assertThat(compilation).hadErrorCount(1);
+    }
+
+    @Test
+    void unambiguousBulkAdderOverloadsRemainUsable() throws Exception {
+        Compilation compilation = compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder public record Sample(
+                    java.util.List<String> things, java.util.List<Integer> allThings) {
+                    public static boolean verify() {
+                        var source = new Sample(java.util.List.of("value"), java.util.List.of(42));
+                        return SampleBuilder.builder(source).build().equals(source);
+                    }
+                }
+                """);
+        CompilationSubject.assertThat(compilation).succeeded();
+        assertThat(loadClass(compilation, "test.Sample").getMethod("verify").invoke(null))
+                .isEqualTo(true);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"String Class", "String x, int X"})
+    void conflictingAccessorNamesProduceActionableDiagnostics(String components) {
+        Compilation compilation = compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder public record Sample(%s) {}
+                """.formatted(components));
+        CompilationSubject.assertThat(compilation).failed();
+        CompilationSubject.assertThat(compilation).hadErrorContaining("accessor name conflicts");
+        CompilationSubject.assertThat(compilation).hadErrorCount(1);
+    }
+
+    @Test
+    void typeParameterAndComponentNamesDoNotShadowNullValidation() {
+        CompilationSubject.assertThat(compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder public record Sample<Objects>(String java) {}
+                """)).succeeded();
+    }
+
+    @Test
+    void componentNamesDoNotShadowNullValidation() throws Exception {
+        Compilation compilation = compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder
+                public record Sample(String Objects, String java, String requireNonNull) {
+                    public static boolean verify() {
+                        var source = new Sample("objects", "java", "requireNonNull");
+                        var builder = SampleBuilder.builder(source);
+                        try {
+                            builder.setObjects(null);
+                            return false;
+                        } catch (NullPointerException expected) {
+                            return builder.build().equals(source);
+                        }
+                    }
+                }
+                """);
+        CompilationSubject.assertThat(compilation).succeeded();
+        assertThat(loadClass(compilation, "test.Sample").getMethod("verify").invoke(null))
+                .isEqualTo(true);
+    }
+
     @Test
     void mergeUsesComponentNamesWithoutParameterCollisions() throws Exception {
         Compilation compilation = compile("Sample", """
