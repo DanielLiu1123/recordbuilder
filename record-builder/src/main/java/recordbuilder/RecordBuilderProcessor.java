@@ -7,6 +7,7 @@ import com.palantir.javapoet.CodeBlock;
 import com.palantir.javapoet.FieldSpec;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.MethodSpec;
+import com.palantir.javapoet.NameAllocator;
 import com.palantir.javapoet.ParameterizedTypeName;
 import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
@@ -644,11 +645,16 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
     private MethodSpec generateMergeMethod(
             TypeName recordTypeName, TypeName builderTypeName, List<? extends RecordComponentElement> components) {
+        var names = new NameAllocator();
+        for (RecordComponentElement component : components) {
+            names.newName(component.getSimpleName().toString());
+        }
+        String sourceName = names.newName("other");
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("merge")
                 .addModifiers(Modifier.PUBLIC)
                 .returns(builderTypeName)
-                .addParameter(recordTypeName, "other")
-                .addStatement("$T.requireNonNull(other, \"other cannot be null\")", Objects.class);
+                .addParameter(recordTypeName, sourceName)
+                .addStatement("$T.requireNonNull($L, $S)", Objects.class, sourceName, "other cannot be null");
 
         for (RecordComponentElement component : components) {
             String fieldName = component.getSimpleName().toString();
@@ -659,9 +665,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             // Use setter method for all fields
             if (isPrimitive(component)) {
                 // If primitive, no null check needed
-                methodBuilder.addStatement("this.$L(other.$L())", setterName, fieldName);
+                methodBuilder.addStatement("this.$L($L.$L())", setterName, sourceName, fieldName);
             } else {
-                String valueName = "value_" + fieldName;
                 String methodName = setterName;
                 if (isCollection(component)) {
                     methodName = allAllName;
@@ -669,9 +674,9 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                     methodName = putAllName;
                 }
                 methodBuilder
-                        .addStatement("var $L = other.$L()", valueName, fieldName)
-                        .beginControlFlow("if ($L != null)", valueName)
-                        .addStatement("this.$L($L)", methodName, valueName)
+                        .addStatement("var $L = $L.$L()", fieldName, sourceName, fieldName)
+                        .beginControlFlow("if ($L != null)", fieldName)
+                        .addStatement("this.$L($L)", methodName, fieldName)
                         .endControlFlow();
             }
         }

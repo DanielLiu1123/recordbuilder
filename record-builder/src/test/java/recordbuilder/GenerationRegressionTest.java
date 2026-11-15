@@ -18,6 +18,31 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class GenerationRegressionTest {
     @Test
+    void mergeUsesComponentNamesWithoutParameterCollisions() throws Exception {
+        Compilation compilation = compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder
+                public record Sample(String name, String other, String other_, int count) {
+                    public static boolean verify() {
+                        var source = new Sample("name", "other", "other_", 42);
+                        return SampleBuilder.builder(source).build().equals(source);
+                    }
+                }
+                """);
+        CompilationSubject.assertThat(compilation).succeeded();
+        String generated = compilation
+                .generatedSourceFile("test.SampleBuilder")
+                .orElseThrow()
+                .getCharContent(true)
+                .toString();
+        assertThat(generated)
+                .contains("var name = other__.name()", "var other = other__.other()", "var other_ = other__.other_()")
+                .doesNotContain("value_name");
+        assertThat(loadClass(compilation, "test.Sample").getMethod("verify").invoke(null))
+                .isEqualTo(true);
+    }
+
+    @Test
     void componentNameDoesNotCollideWithPresenceMask() {
         CompilationSubject.assertThat(compile("Sample", """
                 package test;
