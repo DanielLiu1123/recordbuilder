@@ -21,6 +21,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.concurrent.CopyOnWriteArrayList;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.FilerException;
@@ -353,14 +354,37 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         builder.addStatement("pending.add(value)").endControlFlow();
 
         var implClass = getCollectionImplClass(component).orElseThrow();
-        builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
-        builder.beginControlFlow("for (var value : pending)");
-        if (isWildcard(elementType)) {
-            builder.addStatement("(($T) this._$L).add(value)", implClass, fieldName);
+        if (implClass == ArrayList.class) {
+            // The validated buffer can become the initial backing list without a second copy.
+            builder.beginControlFlow("if (this._$L == null)", fieldName);
+            if (isWildcard(elementType)) {
+                builder.addStatement("this._$L = ($T) pending", fieldName, implClass);
+            } else {
+                builder.addStatement("this._$L = pending", fieldName);
+            }
+            builder.nextControlFlow("else");
         } else {
-            builder.addStatement("this._$L.add(value)", fieldName);
+            builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
         }
-        builder.endControlFlow();
+        if (implClass == CopyOnWriteArrayList.class) {
+            // A single bulk append copies the backing array once.
+            if (isWildcard(elementType)) {
+                builder.addStatement("(($T) this._$L).addAll(pending)", implClass, fieldName);
+            } else {
+                builder.addStatement("this._$L.addAll(pending)", fieldName);
+            }
+        } else {
+            builder.beginControlFlow("for (int i = 0; i < pending.size(); i++)");
+            if (isWildcard(elementType)) {
+                builder.addStatement("(($T) this._$L).add(pending.get(i))", implClass, fieldName);
+            } else {
+                builder.addStatement("this._$L.add(pending.get(i))", fieldName);
+            }
+            builder.endControlFlow();
+        }
+        if (implClass == ArrayList.class) {
+            builder.endControlFlow();
+        }
 
         return builder.addStatement(presenceMask.setBit(fieldIndex))
                 .addStatement("return this")

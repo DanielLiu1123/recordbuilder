@@ -4,17 +4,44 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
 
 class BulkMutationTest {
     @RecordBuilder
     record Batch(List<String> items, Map<String, String> entries) {}
+
+    @RecordBuilder
+    record ConcurrentBatch(CopyOnWriteArrayList<String> items) {}
+
+    @Test
+    void copyOnWriteBulkAppendPreservesReferencesAndValidatesBeforeWriting() {
+        var builder = BulkMutationTest_ConcurrentBatchBuilder.builder().addItems("existing");
+        var items = builder.getItems();
+        assertThatThrownBy(() -> builder.addAllItems(Arrays.asList("valid", null)))
+                .isInstanceOf(NullPointerException.class);
+        assertThat(items).containsExactly("existing");
+        builder.addAllItems(items);
+        assertThat(builder.getItems()).isSameAs(items).containsExactly("existing", "existing");
+        assertThat(builder.hasItems()).isTrue();
+    }
+
+    @Test
+    void initialBulkListRemainsIndependentOfInputAndSupportsFurtherMutation() {
+        var input = new ArrayList<>(List.of("first"));
+        var builder = BulkMutationTest_BatchBuilder.builder().addAllItems(input);
+        var items = builder.getItems();
+        input.clear();
+        builder.addItems("second").addAllItems(List.of("third"));
+        assertThat(builder.getItems()).isSameAs(items).containsExactly("first", "second", "third");
+    }
 
     @Test
     void invalidCollectionDoesNotChangeAnUnsetField() {
