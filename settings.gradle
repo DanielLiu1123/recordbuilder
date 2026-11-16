@@ -1,4 +1,4 @@
-rootProject.name = "record-builder-root"
+rootProject.name = "recordbuilder"
 
 include(":record-builder")
 
