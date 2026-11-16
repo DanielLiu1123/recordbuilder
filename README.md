@@ -23,6 +23,9 @@ Inspired by Protobuf, this project generates builder classes for records with se
 dependencies {
     compileOnly "io.github.danielliu1123:record-builder:+"
     annotationProcessor "io.github.danielliu1123:record-builder:+"
+
+    // For @Nullable in the example below
+    compileOnly "org.jspecify:jspecify:1.0.0"
 }
 ```
 
@@ -31,8 +34,10 @@ dependencies {
 Add `@RecordBuilder` annotation to your record:
 
 ```java
-import recordbuilder.RecordBuilder;
+import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
+import recordbuilder.RecordBuilder;
 
 @RecordBuilder
 public record User(
@@ -44,25 +49,56 @@ public record User(
 ) {}
 ```
 
-### Generated Code
-
-After compilation, a `UserBuilder` class will be generated with the following structure:
+Use the generated builder:
 
 ```java
+var builder = UserBuilder.builder()
+    .setName("Alice")
+    .setAge(30)
+    .setEmail(null)
+    .addRoles("reader")
+    .putAttributes("theme", "light");
+
+System.out.println(builder.hasEmail()); // true: explicitly set, even though null
+builder.clearEmail();
+System.out.println(builder.hasEmail()); // false: unset
+
+var user = builder.build();
+
+var updated = UserBuilder.builder(user)
+    .addRoles("editor")
+    .putAttributes("theme", "dark")
+    .build();
+
+System.out.println(updated.roles()); // [reader, editor]
+System.out.println(updated.attributes().get("theme")); // dark
+System.out.println(user.roles()); // [reader]
+System.out.println(user.attributes().get("theme")); // light
+```
+
+`builder(user)` starts a new builder and merges the record into it. `merge(other)` skips null references, replaces singular values, adds collection elements, and puts map entries (overwriting existing values for matching keys).
+
+Unset reference fields remain null; `build()` passes the current values to the record constructor without checking that every field has been set.
+
+### Generated Code
+
+After compilation, a `UserBuilder` class will be generated with the following structure (method bodies omitted):
+
+```java
+import java.util.List;
+import java.util.Map;
+import javax.annotation.processing.Generated;
 import org.jspecify.annotations.Nullable;
 
-@Generated(
-    value = "recordbuilder.RecordBuilderProcessor",
-    date = "..."
-)
+@Generated("recordbuilder.RecordBuilderProcessor")
 public final class UserBuilder {
     private String _name;
     private Integer _age;
     private @Nullable String _email;
     private List<String> _roles;
     private Map<String, String> _attributes;
-   
-    private int _presenceMask0_;
+
+    private int presenceMask;
 
     private UserBuilder() {}
 
@@ -118,8 +154,9 @@ public final class UserBuilder {
 ```
 
 The generated builder includes:
+
 - **Factory methods**: `builder()` to create new builder, `builder(prototype)` to copy from existing record
-- **Merge method**: `merge(other)` to copy from existing record
+- **Merge method**: `merge(other)` to merge non-null values from an existing record, adding collection elements and putting map entries
 - **Setter methods**: `setXxx()` with fluent API, non-null fields have null validation
 - **Adder/Putter methods**: `addXxx()`/`addAllXxx()` for Collection, `putXxx()`/`putAllXxx()` for Map
 - **Getter methods**: `getXxx()` to access current field values
