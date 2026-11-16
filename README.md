@@ -21,11 +21,8 @@ Inspired by Protobuf, this project generates builder classes for records with se
 
 ```gradle
 dependencies {
-    compileOnly "io.github.danielliu1123:record-builder:+"
-    annotationProcessor "io.github.danielliu1123:record-builder:+"
-
-    // For @Nullable in the example below
-    compileOnly "org.jspecify:jspecify:1.0.0"
+    compileOnly "io.github.danielliu1123:record-builder:0.8.1"
+    annotationProcessor "io.github.danielliu1123:record-builder:0.8.1"
 }
 ```
 
@@ -75,10 +72,6 @@ System.out.println(updated.attributes().get("theme")); // dark
 System.out.println(user.roles()); // [reader]
 System.out.println(user.attributes().get("theme")); // light
 ```
-
-`builder(user)` starts a new builder and merges the record into it. `merge(other)` skips null references, replaces singular values, adds collection elements, and puts map entries (overwriting existing values for matching keys).
-
-Unset reference fields remain null; `build()` passes the current values to the record constructor without checking that every field has been set.
 
 ### Generated Code
 
