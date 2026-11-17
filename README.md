@@ -21,8 +21,8 @@ Inspired by Protobuf, this project generates builder classes for records with se
 
 ```gradle
 dependencies {
-    compileOnly "io.github.danielliu1123:record-builder:0.8.1"
-    annotationProcessor "io.github.danielliu1123:record-builder:0.8.1"
+    compileOnly "io.github.danielliu1123:record-builder:0.8.2"
+    annotationProcessor "io.github.danielliu1123:record-builder:0.8.2"
 }
 ```
 
