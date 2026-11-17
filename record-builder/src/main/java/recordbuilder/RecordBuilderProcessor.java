@@ -449,18 +449,15 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 isWildcard(keyType) ? ClassName.get(Object.class) : keyType,
                 isWildcard(valueType) ? ClassName.get(Object.class) : valueType);
         TypeName bufferType = ParameterizedTypeName.get(ClassName.get(ArrayList.class), entryType);
-        builder.addStatement("var pending = new $T()", bufferType);
-        builder.beginControlFlow("for (var entry : values.entrySet())");
-        builder.addStatement("var key = entry.getKey()");
-        if (!isNullable(keyType)) {
-            builder.addStatement("$T.requireNonNull(key, $S)", Objects.class, "key cannot be null");
-        }
-        builder.addStatement("var value = entry.getValue()");
-        if (!isNullable(valueType)) {
-            builder.addStatement("$T.requireNonNull(value, $S)", Objects.class, "value cannot be null");
-        }
-
-        builder.addStatement("pending.add(new $T<>(key, value))", AbstractMap.SimpleImmutableEntry.class)
+        var key = CodeBlock.of("entry.getKey()");
+        var value = CodeBlock.of("entry.getValue()");
+        builder.addStatement("var pending = new $T()", bufferType)
+                .beginControlFlow("for (var entry : values.entrySet())")
+                .addStatement(
+                        "pending.add(new $T<>($L, $L))",
+                        AbstractMap.SimpleImmutableEntry.class,
+                        isNullable(keyType) ? key : requireNonNull(key, "key"),
+                        isNullable(valueType) ? value : requireNonNull(value, "value"))
                 .endControlFlow();
 
         var implClass = getMapImplClass(component).orElseThrow();
