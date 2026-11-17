@@ -649,14 +649,15 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         if (implementation.isEmpty()) {
             return field;
         }
-        // Keep the component's static type so the copy does not select a different record constructor.
-        method.addStatement(
-                "$T $L = $L == null ? null : new $T<>($L)",
-                getTypeNameWithAnnotations(component.asType()),
-                name,
-                field,
-                implementation.orElseThrow(),
-                field);
+        var copyClass = implementation.orElseThrow();
+        var arguments = ((DeclaredType) component.asType()).getTypeArguments();
+        // Use var only when the inferred type matches the component type for constructor overload resolution.
+        boolean useVar = getTypeFQN(component).equals(copyClass.getCanonicalName())
+                && !arguments.isEmpty()
+                && arguments.stream().noneMatch(type -> type.getKind() == TypeKind.WILDCARD);
+        var localType =
+                useVar ? CodeBlock.of("var") : CodeBlock.of("$T", getTypeNameWithAnnotations(component.asType()));
+        method.addStatement("$L $L = $L == null ? null : new $T<>($L)", localType, name, field, copyClass, field);
         return CodeBlock.of("$L", name);
     }
 
