@@ -16,6 +16,7 @@ import com.palantir.javapoet.WildcardTypeName;
 import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -642,10 +643,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         if (component.asType().getKind() == TypeKind.ARRAY) {
             return CodeBlock.of("$L == null ? null : $L.clone()", field, field);
         }
-        if (component.asType().getKind() != TypeKind.DECLARED) {
-            return field;
-        }
-        var implementation = getCollectionImplClass(component).or(() -> getMapImplClass(component));
+        var implementation = getContainerImplClass(component);
         if (implementation.isEmpty()) {
             return field;
         }
@@ -688,32 +686,27 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 continue;
             }
 
-            String methodPrefix = "set";
-            CodeBlock localType = CodeBlock.of("var");
-            Class<?> implementation = null;
-            if (isCollection(component)) {
-                methodPrefix = "addAll";
-                implementation = getCollectionImplClass(component).orElseThrow();
-                // Match the bulk parameter type so a more specific single-element adder cannot win.
-                localType = CodeBlock.of("$T", getParameterTypeForCollection((DeclaredType) component.asType()));
-            } else if (isMap(component)) {
-                methodPrefix = "putAll";
-                implementation = getMapImplClass(component).orElseThrow();
-            }
+            var implementation = getContainerImplClass(component).orElse(null);
             boolean sorted = implementation == TreeSet.class || implementation == TreeMap.class;
             String localName = names.get(component);
+            var argument = CodeBlock.of("$L", localName);
+            CodeBlock localType = CodeBlock.of("var");
+            String methodPrefix = "set";
+            if (implementation != null && Collection.class.isAssignableFrom(implementation)) {
+                methodPrefix = "addAll";
+                // Match the bulk parameter type so a more specific single-element adder cannot win.
+                var bulkType = getParameterTypeForCollection((DeclaredType) component.asType());
+                if (sorted) {
+                    argument = CodeBlock.of("($T) $L", bulkType, localName);
+                } else {
+                    localType = CodeBlock.of("$T", bulkType);
+                }
+            } else if (implementation != null) {
+                methodPrefix = "putAll";
+            }
             methodBuilder
-                    .addStatement(
-                            "$L $L = $L.$L()",
-                            sorted ? CodeBlock.of("var") : localType,
-                            localName,
-                            sourceName,
-                            fieldName)
+                    .addStatement("$L $L = $L.$L()", localType, localName, sourceName, fieldName)
                     .beginControlFlow("if ($L != null)", localName);
-            // Keep the sorted source type for the copy and the bulk parameter type for overload resolution.
-            CodeBlock argument = implementation == TreeSet.class
-                    ? CodeBlock.of("($L) $L", localType, localName)
-                    : CodeBlock.of("$L", localName);
             var mergeCall = CodeBlock.of("this.$L$L($L)", methodPrefix, suffix, argument);
             if (sorted) {
                 methodBuilder.beginControlFlow("if (this._$L == null)", fieldName);
@@ -753,12 +746,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 : copyType;
         // Copy by iteration so weakly consistent sources can change size during the copy.
         method.addStatement("var $L = new $T($L.comparator())", copyName, constructorType, sourceName);
-        var keyOrElement = getTypeArgument(declaredType, 0);
         if (implementation == TreeSet.class) {
             String item = names.newName("item");
-            var value = CodeBlock.of("$L", item);
+            var value = checkedArgument(CodeBlock.of("$L", item), getTypeArgument(declaredType, 0), "value");
             method.beginControlFlow("for (var $L : $L)", item, sourceName)
-                    .addStatement("$L.add($L)", copyName, checkedArgument(value, keyOrElement, "value"))
+                    .addStatement("$L.add($L)", copyName, value)
                     .endControlFlow();
         } else {
             addSortedMapEntries(method, declaredType, copyName, sourceName, names);
@@ -805,6 +797,13 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             return str;
         }
         return str.substring(0, 1).toUpperCase(Locale.ROOT) + str.substring(1);
+    }
+
+    private static Optional<Class<?>> getContainerImplClass(RecordComponentElement component) {
+        if (component.asType().getKind() != TypeKind.DECLARED) {
+            return Optional.empty();
+        }
+        return getCollectionImplClass(component).or(() -> getMapImplClass(component));
     }
 
     private static Optional<Class<?>> getCollectionImplClass(RecordComponentElement component) {
