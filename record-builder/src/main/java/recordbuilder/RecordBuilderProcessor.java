@@ -233,8 +233,9 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // See https://docs.gradle.org/current/userguide/java_plugin.html#isolating_annotation_processors
         builderClassBuilder.addOriginatingElement(recordElement);
 
-        JavaFile javaFile =
-                JavaFile.builder(packageName, builderClassBuilder.build()).build();
+        JavaFile javaFile = JavaFile.builder(packageName, builderClassBuilder.build())
+                .addStaticImport(Objects.class, "requireNonNull")
+                .build();
         javaFile.writeTo(filer);
     }
 
@@ -792,9 +793,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private static void addNullCheck(MethodSpec.Builder method, CodeBlock value, String label) {
-        method.beginControlFlow("if ($L == null)", value)
-                .addStatement("throw new $T($S)", NullPointerException.class, label + " cannot be null")
-                .endControlFlow();
+        method.addStatement("$T.requireNonNull($L, $S)", Objects.class, value, label + " cannot be null");
     }
 
     private String capitalize(String str) {

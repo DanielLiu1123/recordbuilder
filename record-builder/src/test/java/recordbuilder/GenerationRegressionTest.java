@@ -290,6 +290,15 @@ class GenerationRegressionTest {
     }
 
     @Test
+    void nullChecksCompileWhenComponentNamesShadowObjects() {
+        CompilationSubject.assertThat(compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder
+                public record Sample(String java, java.util.SortedMap<Integer, String> Objects) {}
+                """)).succeeded();
+    }
+
+    @Test
     void navigableSetComponentKeepsItsSetter() {
         CompilationSubject.assertThat(compile("Sample", """
                 package test;
