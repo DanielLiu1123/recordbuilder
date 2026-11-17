@@ -16,6 +16,7 @@ import com.palantir.javapoet.WildcardTypeName;
 import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,6 +24,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.FilerException;
@@ -183,7 +186,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         builderClassBuilder.addMethod(generateBuilderFromSourceMethod(recordElement, builderTypeName));
 
         // Add merge() method
-        builderClassBuilder.addMethod(generateMergeMethod(recordTypeName, builderTypeName, components));
+        builderClassBuilder.addMethod(generateMergeMethod(recordTypeName, builderTypeName, components, presenceMask));
 
         // Add setter methods for all fields
         // For Collection types, generate addXxx and addAllXxx methods
@@ -269,17 +272,19 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         String fieldName = component.getSimpleName().toString();
         String methodName = "set" + capitalize(fieldName);
         TypeName fieldType = getTypeNameWithAnnotations(component.asType());
+        boolean checkNull = !isNullable(component) && !isPrimitive(component);
+        String parameter = checkNull && (fieldName.equals("Objects") || fieldName.equals("java")) ? "value" : fieldName;
 
         MethodSpec.Builder builder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
                 .returns(builderTypeName)
-                .addParameter(fieldType, fieldName);
+                .addParameter(fieldType, parameter);
 
-        if (!isNullable(component) && !isPrimitive(component)) {
-            builder.addStatement("$T.requireNonNull($L, $S)", Objects.class, fieldName, fieldName + " cannot be null");
+        if (checkNull) {
+            builder.addStatement("$L", requireNonNull(CodeBlock.of("$L", parameter), fieldName));
         }
 
-        builder.addStatement("this._$L = $L", fieldName, fieldName);
+        builder.addStatement("this._$L = $L", fieldName, parameter);
 
         return builder.addStatement(presenceMask.setBit(fieldIndex))
                 .addStatement("return this")
@@ -345,14 +350,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // Read and validate the entire input before changing the builder.
         TypeName bufferType = ParameterizedTypeName.get(
                 ClassName.get(ArrayList.class), isWildcard(elementType) ? ClassName.get(Object.class) : elementType);
-        builder.addStatement("var pending = new $T()", bufferType);
-        builder.beginControlFlow("for (var value : values)");
-
-        if (!isNullable(elementType)) {
-            builder.addStatement("$T.requireNonNull(value, $S)", Objects.class, "value cannot be null");
-        }
-
-        builder.addStatement("pending.add(value)").endControlFlow();
+        var value = CodeBlock.of("value");
+        builder.addStatement("var pending = new $T()", bufferType)
+                .beginControlFlow("for (var value : values)")
+                .addStatement("pending.add($L)", checkedArgument(value, elementType, "value"))
+                .endControlFlow();
 
         var implClass = getCollectionImplClass(component).orElseThrow();
         builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
@@ -448,18 +450,15 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 isWildcard(keyType) ? ClassName.get(Object.class) : keyType,
                 isWildcard(valueType) ? ClassName.get(Object.class) : valueType);
         TypeName bufferType = ParameterizedTypeName.get(ClassName.get(ArrayList.class), entryType);
-        builder.addStatement("var pending = new $T()", bufferType);
-        builder.beginControlFlow("for (var entry : values.entrySet())");
-        builder.addStatement("var key = entry.getKey()");
-        if (!isNullable(keyType)) {
-            builder.addStatement("$T.requireNonNull(key, $S)", Objects.class, "key cannot be null");
-        }
-        builder.addStatement("var value = entry.getValue()");
-        if (!isNullable(valueType)) {
-            builder.addStatement("$T.requireNonNull(value, $S)", Objects.class, "value cannot be null");
-        }
-
-        builder.addStatement("pending.add(new $T<>(key, value))", AbstractMap.SimpleImmutableEntry.class)
+        var key = CodeBlock.of("entry.getKey()");
+        var value = CodeBlock.of("entry.getValue()");
+        builder.addStatement("var pending = new $T()", bufferType)
+                .beginControlFlow("for (var entry : values.entrySet())")
+                .addStatement(
+                        "pending.add(new $T<>($L, $L))",
+                        AbstractMap.SimpleImmutableEntry.class,
+                        checkedArgument(key, keyType, "key"),
+                        checkedArgument(value, valueType, "value"))
                 .endControlFlow();
 
         var implClass = getMapImplClass(component).orElseThrow();
@@ -644,14 +643,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         if (component.asType().getKind() == TypeKind.ARRAY) {
             return CodeBlock.of("$L == null ? null : $L.clone()", field, field);
         }
-        if (component.asType().getKind() != TypeKind.DECLARED) {
-            return field;
-        }
-        var implementation = getCollectionImplClass(component).or(() -> getMapImplClass(component));
+        var implementation = getContainerImplClass(component);
         if (implementation.isEmpty()) {
             return field;
         }
-        // Keep the component's static type so the copy does not select a different record constructor.
+        // Keep the component type so the copy does not select a different record constructor.
         method.addStatement(
                 "$T $L = $L == null ? null : new $T<>($L)",
                 getTypeNameWithAnnotations(component.asType()),
@@ -663,10 +659,16 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generateMergeMethod(
-            TypeName recordTypeName, TypeName builderTypeName, List<? extends RecordComponentElement> components) {
+            TypeName recordTypeName,
+            TypeName builderTypeName,
+            List<? extends RecordComponentElement> components,
+            PresenceMask presenceMask) {
         var names = new NameAllocator();
+        // Keep both imported and fully qualified references to java.util.Objects visible.
+        names.newName("Objects");
+        names.newName("java");
         for (RecordComponentElement component : components) {
-            names.newName(component.getSimpleName().toString());
+            names.newName(component.getSimpleName().toString(), component);
         }
         String sourceName = names.newName("other");
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("merge")
@@ -675,7 +677,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addParameter(recordTypeName, sourceName)
                 .addStatement("$T.requireNonNull($L, $S)", Objects.class, sourceName, "other cannot be null");
 
-        for (RecordComponentElement component : components) {
+        for (int i = 0; i < components.size(); i++) {
+            var component = components.get(i);
             String fieldName = component.getSimpleName().toString();
             String suffix = capitalize(fieldName);
             if (isPrimitive(component)) {
@@ -683,20 +686,40 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 continue;
             }
 
-            String methodPrefix = "set";
+            var implementation = getContainerImplClass(component).orElse(null);
+            boolean sorted = implementation == TreeSet.class || implementation == TreeMap.class;
+            String localName = names.get(component);
+            var argument = CodeBlock.of("$L", localName);
             CodeBlock localType = CodeBlock.of("var");
-            if (isCollection(component)) {
+            String methodPrefix = "set";
+            if (implementation != null && Collection.class.isAssignableFrom(implementation)) {
                 methodPrefix = "addAll";
                 // Match the bulk parameter type so a more specific single-element adder cannot win.
-                localType = CodeBlock.of("$T", getParameterTypeForCollection((DeclaredType) component.asType()));
-            } else if (isMap(component)) {
+                var bulkType = getParameterTypeForCollection((DeclaredType) component.asType());
+                if (sorted) {
+                    argument = CodeBlock.of("($T) $L", bulkType, localName);
+                } else {
+                    localType = CodeBlock.of("$T", bulkType);
+                }
+            } else if (implementation != null) {
                 methodPrefix = "putAll";
             }
             methodBuilder
-                    .addStatement("$L $L = $L.$L()", localType, fieldName, sourceName, fieldName)
-                    .beginControlFlow("if ($L != null)", fieldName)
-                    .addStatement("this.$L$L($L)", methodPrefix, suffix, fieldName)
-                    .endControlFlow();
+                    .addStatement("$L $L = $L.$L()", localType, localName, sourceName, fieldName)
+                    .beginControlFlow("if ($L != null)", localName);
+            var mergeCall = CodeBlock.of("this.$L$L($L)", methodPrefix, suffix, argument);
+            if (sorted) {
+                methodBuilder.beginControlFlow("if (this._$L == null)", fieldName);
+                addSortedCopy(methodBuilder, component, implementation, localName, names);
+                methodBuilder
+                        .addStatement(presenceMask.setBit(i))
+                        .nextControlFlow("else")
+                        .addStatement("$L", mergeCall)
+                        .endControlFlow();
+            } else {
+                methodBuilder.addStatement("$L", mergeCall);
+            }
+            methodBuilder.endControlFlow();
         }
 
         methodBuilder.addStatement("return this");
@@ -704,11 +727,83 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         return methodBuilder.build();
     }
 
+    private void addSortedCopy(
+            MethodSpec.Builder method,
+            RecordComponentElement component,
+            Class<?> implementation,
+            String sourceName,
+            NameAllocator names) {
+        var declaredType = (DeclaredType) component.asType();
+        var fieldName = component.getSimpleName();
+        String copyName = names.newName(fieldName + "Copy");
+        var arguments = declaredType.getTypeArguments();
+        var copyType = ClassName.get(implementation);
+        // A raw temporary lets the copy accept elements captured by a wildcard source.
+        TypeName constructorType = hasConcreteTypeArguments(declaredType)
+                ? ParameterizedTypeName.get(
+                        copyType,
+                        arguments.stream().map(this::getTypeNameWithAnnotations).toArray(TypeName[]::new))
+                : copyType;
+        // Copy by iteration so weakly consistent sources can change size during the copy.
+        method.addStatement("var $L = new $T($L.comparator())", copyName, constructorType, sourceName);
+        if (implementation == TreeSet.class) {
+            String item = names.newName("item");
+            var value = checkedArgument(CodeBlock.of("$L", item), getTypeArgument(declaredType, 0), "value");
+            method.beginControlFlow("for (var $L : $L)", item, sourceName)
+                    .addStatement("$L.add($L)", copyName, value)
+                    .endControlFlow();
+        } else {
+            addSortedMapEntries(method, declaredType, copyName, sourceName, names);
+        }
+        method.addStatement("this._$L = $L", fieldName, copyName);
+    }
+
+    private void addSortedMapEntries(
+            MethodSpec.Builder method, DeclaredType type, String copyName, String sourceName, NameAllocator names) {
+        var keyType = getTypeArgument(type, 0);
+        var valueType = getTypeArgument(type, 1);
+        // Give raw maps a wildcard view so entrySet() still yields Map.Entry.
+        var source = type.getTypeArguments().isEmpty()
+                ? CodeBlock.of("(($T<?, ?>) $L)", Map.class, sourceName)
+                : CodeBlock.of("$L", sourceName);
+        String entry = names.newName("entry");
+        var key = CodeBlock.of("$L.getKey()", entry);
+        var value = CodeBlock.of("$L.getValue()", entry);
+        method.beginControlFlow("for (var $L : $L.entrySet())", entry, source)
+                .addStatement(
+                        "$L.put($L, $L)",
+                        copyName,
+                        checkedArgument(key, keyType, "key"),
+                        checkedArgument(value, valueType, "value"))
+                .endControlFlow();
+    }
+
+    private static boolean hasConcreteTypeArguments(DeclaredType type) {
+        var arguments = type.getTypeArguments();
+        return !arguments.isEmpty()
+                && arguments.stream().noneMatch(argument -> argument.getKind() == TypeKind.WILDCARD);
+    }
+
+    private static CodeBlock checkedArgument(CodeBlock value, TypeName type, String label) {
+        return isNullable(type) ? value : requireNonNull(value, label);
+    }
+
+    private static CodeBlock requireNonNull(CodeBlock value, String label) {
+        return CodeBlock.of("$T.requireNonNull($L, $S)", Objects.class, value, label + " cannot be null");
+    }
+
     private String capitalize(String str) {
         if (str == null || str.isEmpty()) {
             return str;
         }
         return str.substring(0, 1).toUpperCase(Locale.ROOT) + str.substring(1);
+    }
+
+    private static Optional<Class<?>> getContainerImplClass(RecordComponentElement component) {
+        if (component.asType().getKind() != TypeKind.DECLARED) {
+            return Optional.empty();
+        }
+        return getCollectionImplClass(component).or(() -> getMapImplClass(component));
     }
 
     private static Optional<Class<?>> getCollectionImplClass(RecordComponentElement component) {

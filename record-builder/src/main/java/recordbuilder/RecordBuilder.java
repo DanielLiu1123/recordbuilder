@@ -118,7 +118,9 @@ import java.lang.annotation.Target;
  *
  * <p>Bulk methods validate input nulls before changing the field. Collection-specific insertion
  * failures are governed by the underlying implementation. Merge skips null references, overwrites
- * primitive and scalar values, and adds collection elements and map entries.
+ * primitive and scalar values, and adds collection elements and map entries. When merging into
+ * an uninitialized sorted field with generated add or put methods, the builder copies the source comparator.
+ * An initialized field keeps its comparator.
  *
  * <p>Nested record builder names include all enclosing type names separated by underscores.
  * Records must be accessible from
