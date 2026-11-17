@@ -233,9 +233,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // See https://docs.gradle.org/current/userguide/java_plugin.html#isolating_annotation_processors
         builderClassBuilder.addOriginatingElement(recordElement);
 
-        JavaFile javaFile = JavaFile.builder(packageName, builderClassBuilder.build())
-                .addStaticImport(Objects.class, "requireNonNull")
-                .build();
+        JavaFile javaFile =
+                JavaFile.builder(packageName, builderClassBuilder.build()).build();
         javaFile.writeTo(filer);
     }
 
@@ -272,17 +271,19 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         String fieldName = component.getSimpleName().toString();
         String methodName = "set" + capitalize(fieldName);
         TypeName fieldType = getTypeNameWithAnnotations(component.asType());
+        boolean checkNull = !isNullable(component) && !isPrimitive(component);
+        String parameter = checkNull && (fieldName.equals("Objects") || fieldName.equals("java")) ? "value" : fieldName;
 
         MethodSpec.Builder builder = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC)
                 .returns(builderTypeName)
-                .addParameter(fieldType, fieldName);
+                .addParameter(fieldType, parameter);
 
-        if (!isNullable(component) && !isPrimitive(component)) {
-            builder.addStatement("$T.requireNonNull($L, $S)", Objects.class, fieldName, fieldName + " cannot be null");
+        if (checkNull) {
+            addNullCheck(builder, CodeBlock.of("$L", parameter), fieldName);
         }
 
-        builder.addStatement("this._$L = $L", fieldName, fieldName);
+        builder.addStatement("this._$L = $L", fieldName, parameter);
 
         return builder.addStatement(presenceMask.setBit(fieldIndex))
                 .addStatement("return this")
@@ -671,8 +672,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             List<? extends RecordComponentElement> components,
             PresenceMask presenceMask) {
         var names = new NameAllocator();
+        // Keep both imported and fully qualified references to java.util.Objects visible.
+        names.newName("Objects");
+        names.newName("java");
         for (RecordComponentElement component : components) {
-            names.newName(component.getSimpleName().toString());
+            names.newName(component.getSimpleName().toString(), component);
         }
         String sourceName = names.newName("other");
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("merge")
@@ -703,22 +707,23 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 implementation = getMapImplClass(component).orElseThrow();
             }
             boolean sorted = implementation == TreeSet.class || implementation == TreeMap.class;
+            String localName = names.get(component);
             methodBuilder
                     .addStatement(
                             "$L $L = $L.$L()",
                             sorted ? CodeBlock.of("var") : localType,
-                            fieldName,
+                            localName,
                             sourceName,
                             fieldName)
-                    .beginControlFlow("if ($L != null)", fieldName);
+                    .beginControlFlow("if ($L != null)", localName);
             // Keep the sorted source type for the copy and the bulk parameter type for overload resolution.
             CodeBlock argument = implementation == TreeSet.class
-                    ? CodeBlock.of("($L) $L", localType, fieldName)
-                    : CodeBlock.of("$L", fieldName);
+                    ? CodeBlock.of("($L) $L", localType, localName)
+                    : CodeBlock.of("$L", localName);
             var mergeCall = CodeBlock.of("this.$L$L($L)", methodPrefix, suffix, argument);
             if (sorted) {
                 methodBuilder.beginControlFlow("if (this._$L == null)", fieldName);
-                addSortedCopy(methodBuilder, component, implementation, names);
+                addSortedCopy(methodBuilder, component, implementation, localName, names);
                 methodBuilder
                         .addStatement(presenceMask.setBit(i))
                         .nextControlFlow("else")
@@ -736,7 +741,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private void addSortedCopy(
-            MethodSpec.Builder method, RecordComponentElement component, Class<?> implementation, NameAllocator names) {
+            MethodSpec.Builder method,
+            RecordComponentElement component,
+            Class<?> implementation,
+            String sourceName,
+            NameAllocator names) {
         var declaredType = (DeclaredType) component.asType();
         var fieldName = component.getSimpleName();
         String copyName = names.newName(fieldName + "Copy");
@@ -750,27 +759,23 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                         copyType,
                         arguments.stream().map(this::getTypeNameWithAnnotations).toArray(TypeName[]::new));
         // Copy by iteration so weakly consistent sources can change size during the copy.
-        method.addStatement("var $L = new $T($L.comparator())", copyName, constructorType, fieldName);
+        method.addStatement("var $L = new $T($L.comparator())", copyName, constructorType, sourceName);
         var keyOrElement = getTypeArgument(declaredType, 0);
         if (implementation == TreeSet.class) {
             String item = names.newName("item");
-            method.beginControlFlow("for (var $L : $L)", item, fieldName);
+            method.beginControlFlow("for (var $L : $L)", item, sourceName);
             if (!isNullable(keyOrElement)) {
                 addNullCheck(method, CodeBlock.of("$L", item), "value");
             }
             method.addStatement("$L.add($L)", copyName, item).endControlFlow();
         } else {
-            addSortedMapEntries(method, declaredType, copyName, fieldName, names);
+            addSortedMapEntries(method, declaredType, copyName, sourceName, names);
         }
         method.addStatement("this._$L = $L", fieldName, copyName);
     }
 
     private void addSortedMapEntries(
-            MethodSpec.Builder method,
-            DeclaredType type,
-            String copyName,
-            CharSequence sourceName,
-            NameAllocator names) {
+            MethodSpec.Builder method, DeclaredType type, String copyName, String sourceName, NameAllocator names) {
         var keyType = getTypeArgument(type, 0);
         var valueType = getTypeArgument(type, 1);
         // Give raw maps a wildcard view so entrySet() still yields Map.Entry.
