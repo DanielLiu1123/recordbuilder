@@ -4,10 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Comparator;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 import org.junit.jupiter.api.Test;
 
 class SortedComparatorTest {
@@ -95,5 +100,38 @@ class SortedComparatorTest {
                 .hasMessage("key cannot be null");
         assertThat(builder.hasLabels()).isFalse();
         assertThat(builder.getLabels()).isNull();
+    }
+
+    @Test
+    void copyUsesTheEntriesActuallyReturnedByWeaklyConsistentIterators() {
+        Comparator<Score> order = Comparator.comparingInt(Score::points).reversed();
+        var retained = new Score(10);
+        var removed = new Score(20);
+        var scores = new ConcurrentSkipListSet<Score>(order) {
+            @Override
+            public Iterator<Score> iterator() {
+                remove(removed);
+                return super.iterator();
+            }
+        };
+        scores.add(retained);
+        scores.add(removed);
+        var labels = new ConcurrentSkipListMap<Score, String>(order) {
+            @Override
+            public Set<Map.Entry<Score, String>> entrySet() {
+                remove(removed);
+                return super.entrySet();
+            }
+        };
+        labels.put(retained, "retained");
+        labels.put(removed, "removed");
+
+        var copy = SortedComparatorTest_LeaderboardBuilder.builder(new Leaderboard(scores, labels))
+                .build();
+
+        assertThat(copy.scores()).containsExactly(retained);
+        assertThat(copy.labels()).containsExactlyEntriesOf(Map.of(retained, "retained"));
+        assertThat(copy.scores().comparator()).isSameAs(order);
+        assertThat(copy.labels().comparator()).isSameAs(order);
     }
 }

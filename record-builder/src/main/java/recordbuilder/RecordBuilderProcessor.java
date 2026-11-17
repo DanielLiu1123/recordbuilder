@@ -739,42 +739,57 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         var declaredType = (DeclaredType) component.asType();
         var fieldName = component.getSimpleName();
         String copyName = names.newName(fieldName + "Copy");
-        // The sorted-source constructor keeps the comparator, including for empty containers.
+        // Copy by iteration so weakly consistent sources can change size during the copy.
+        boolean wildcard =
+                declaredType.getTypeArguments().stream().anyMatch(type -> type.getKind() == TypeKind.WILDCARD);
+        // A raw temporary lets the copy accept elements captured by a wildcard source.
+        var copyType = wildcard ? ClassName.get(implementation) : getTypeNameWithAnnotations(declaredType);
         method.addStatement(
-                "$T $L = new $T<>($L)", getTypeNameWithAnnotations(declaredType), copyName, implementation, fieldName);
+                "$T $L = new $T$L($L.comparator())",
+                copyType,
+                copyName,
+                implementation,
+                wildcard ? "" : "<>",
+                fieldName);
+        var keyOrElement = getTypeArgument(declaredType, 0);
         if (implementation == TreeSet.class) {
-            if (!isNullable(getTypeArgument(declaredType, 0))) {
-                String item = names.newName("item");
-                method.beginControlFlow("for (var $L : $L)", item, copyName);
+            String item = names.newName("item");
+            method.beginControlFlow("for (var $L : $L)", item, fieldName);
+            if (!isNullable(keyOrElement)) {
                 addNullCheck(method, CodeBlock.of("$L", item), "value");
-                method.endControlFlow();
             }
+            method.addStatement("$L.add($L)", copyName, item).endControlFlow();
         } else {
-            addSortedMapNullChecks(method, declaredType, copyName, names);
+            addSortedMapEntries(method, declaredType, copyName, fieldName, names);
         }
         method.addStatement("this._$L = $L", fieldName, copyName);
     }
 
-    private void addSortedMapNullChecks(
-            MethodSpec.Builder method, DeclaredType type, String copyName, NameAllocator names) {
-        boolean checkKey = !isNullable(getTypeArgument(type, 0));
-        boolean checkValue = !isNullable(getTypeArgument(type, 1));
-        if (!checkKey && !checkValue) {
-            return;
-        }
+    private void addSortedMapEntries(
+            MethodSpec.Builder method,
+            DeclaredType type,
+            String copyName,
+            CharSequence sourceName,
+            NameAllocator names) {
+        var keyType = getTypeArgument(type, 0);
+        var valueType = getTypeArgument(type, 1);
         // Give raw maps a wildcard view so entrySet() still yields Map.Entry.
-        var map = type.getTypeArguments().isEmpty()
-                ? CodeBlock.of("(($T<?, ?>) $L)", Map.class, copyName)
-                : CodeBlock.of("$L", copyName);
+        var source = type.getTypeArguments().isEmpty()
+                ? CodeBlock.of("(($T<?, ?>) $L)", Map.class, sourceName)
+                : CodeBlock.of("$L", sourceName);
         String entry = names.newName("entry");
-        method.beginControlFlow("for (var $L : $L.entrySet())", entry, map);
-        if (checkKey) {
-            addNullCheck(method, CodeBlock.of("$L.getKey()", entry), "key");
+        String key = names.newName("key");
+        String value = names.newName("value");
+        method.beginControlFlow("for (var $L : $L.entrySet())", entry, source)
+                .addStatement("var $L = $L.getKey()", key, entry);
+        if (!isNullable(keyType)) {
+            addNullCheck(method, CodeBlock.of("$L", key), "key");
         }
-        if (checkValue) {
-            addNullCheck(method, CodeBlock.of("$L.getValue()", entry), "value");
+        method.addStatement("var $L = $L.getValue()", value, entry);
+        if (!isNullable(valueType)) {
+            addNullCheck(method, CodeBlock.of("$L", value), "value");
         }
-        method.endControlFlow();
+        method.addStatement("$L.put($L, $L)", copyName, key, value).endControlFlow();
     }
 
     private static void addNullCheck(MethodSpec.Builder method, CodeBlock value, String label) {
