@@ -626,21 +626,40 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
         for (int i = 0; i < components.size(); i++) {
             RecordComponentElement component = components.get(i);
-            String fieldName = component.getSimpleName().toString();
-
             if (i > 0) {
                 returnStatement.add(", ");
             }
-
-            returnStatement.add("\n");
-
-            returnStatement.add("this._$L", fieldName);
+            returnStatement.add("\n$L", prepareBuildArgument(methodBuilder, component));
         }
 
         returnStatement.add(")");
         methodBuilder.addStatement(returnStatement.build());
 
         return methodBuilder.build();
+    }
+
+    private CodeBlock prepareBuildArgument(MethodSpec.Builder method, RecordComponentElement component) {
+        var name = component.getSimpleName();
+        var field = CodeBlock.of("this._$L", name);
+        if (component.asType().getKind() == TypeKind.ARRAY) {
+            return CodeBlock.of("$L == null ? null : $L.clone()", field, field);
+        }
+        if (component.asType().getKind() != TypeKind.DECLARED) {
+            return field;
+        }
+        var implementation = getCollectionImplClass(component).or(() -> getMapImplClass(component));
+        if (implementation.isEmpty()) {
+            return field;
+        }
+        // Keep the component's static type so the copy does not select a different record constructor.
+        method.addStatement(
+                "$T $L = $L == null ? null : new $T<>($L)",
+                getTypeNameWithAnnotations(component.asType()),
+                name,
+                field,
+                implementation.orElseThrow(),
+                field);
+        return CodeBlock.of("$L", name);
     }
 
     private MethodSpec generateMergeMethod(

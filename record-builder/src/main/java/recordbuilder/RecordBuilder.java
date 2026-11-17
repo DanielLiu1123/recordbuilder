@@ -111,9 +111,10 @@ import java.lang.annotation.Target;
  *
  * <p>
  * Input null validation is applied by default unless the field is annotated with @Nullable.
- * Unset reference fields remain null, including in getters and build(). The record constructor
- * is responsible for required-field validation and any defensive copies. Collections and arrays
- * are shared by reference with the constructed record.
+ * Unset reference fields remain null, including in getters and build(). Each build makes a
+ * mutable shallow copy of non-null arrays and of collection and map fields that have generated
+ * add or put methods. The record constructor is responsible for required-field validation and
+ * for any additional copying.
  *
  * <p>Bulk methods validate input nulls before changing the field. Collection-specific insertion
  * failures are governed by the underlying implementation. Merge skips null references, overwrites
