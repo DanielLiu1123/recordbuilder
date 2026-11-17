@@ -3,6 +3,7 @@ package recordbuilder;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -18,6 +19,9 @@ class BuildSnapshotTest {
             this(List.of("from overload"));
         }
     }
+
+    @RecordBuilder
+    record IdentityEntries(IdentityHashMap<List<String>, String> entries) {}
 
     @Test
     void reusingBuilderDoesNotChangePreviouslyBuiltRecords() {
@@ -63,5 +67,20 @@ class BuildSnapshotTest {
                 BuildSnapshotTest_OverloadedBuilder.builder().addRoles("reader").build();
 
         assertThat(record.roles()).containsExactly("reader");
+    }
+
+    @Test
+    void mapSnapshotPreservesIdentityBasedKeys() {
+        var firstKey = new ArrayList<String>();
+        var secondKey = new ArrayList<String>();
+        var builder = BuildSnapshotTest_IdentityEntriesBuilder.builder()
+                .putEntries(firstKey, "first")
+                .putEntries(secondKey, "second");
+        var snapshot = builder.build();
+        builder.putEntries(firstKey, "changed");
+
+        assertThat(snapshot.entries()).hasSize(2);
+        assertThat(snapshot.entries().get(firstKey)).isEqualTo("first");
+        assertThat(snapshot.entries().get(secondKey)).isEqualTo("second");
     }
 }

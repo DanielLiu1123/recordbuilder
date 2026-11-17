@@ -644,21 +644,22 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         if (component.asType().getKind() == TypeKind.ARRAY) {
             return CodeBlock.of("$L == null ? null : $L.clone()", field, field);
         }
-        if (isCollection(component) || isMap(component)) {
-            var implementation = getCollectionImplClass(component)
-                    .or(() -> getMapImplClass(component))
-                    .orElseThrow();
-            // Keep the component's static type so the copy does not select a different record constructor.
-            method.addStatement(
-                    "$T $L = $L == null ? null : new $T<>($L)",
-                    getTypeNameWithAnnotations(component.asType()),
-                    name,
-                    field,
-                    implementation,
-                    field);
-            return CodeBlock.of("$L", name);
+        if (component.asType().getKind() != TypeKind.DECLARED) {
+            return field;
         }
-        return field;
+        var implementation = getCollectionImplClass(component).or(() -> getMapImplClass(component));
+        if (implementation.isEmpty()) {
+            return field;
+        }
+        // Keep the component's static type so the copy does not select a different record constructor.
+        method.addStatement(
+                "$T $L = $L == null ? null : new $T<>($L)",
+                getTypeNameWithAnnotations(component.asType()),
+                name,
+                field,
+                implementation.orElseThrow(),
+                field);
+        return CodeBlock.of("$L", name);
     }
 
     private MethodSpec generateMergeMethod(
