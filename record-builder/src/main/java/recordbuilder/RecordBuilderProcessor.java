@@ -349,14 +349,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // Read and validate the entire input before changing the builder.
         TypeName bufferType = ParameterizedTypeName.get(
                 ClassName.get(ArrayList.class), isWildcard(elementType) ? ClassName.get(Object.class) : elementType);
-        builder.addStatement("var pending = new $T()", bufferType);
-        builder.beginControlFlow("for (var value : values)");
-
-        if (!isNullable(elementType)) {
-            builder.addStatement("$T.requireNonNull(value, $S)", Objects.class, "value cannot be null");
-        }
-
-        builder.addStatement("pending.add(value)").endControlFlow();
+        var value = CodeBlock.of("value");
+        builder.addStatement("var pending = new $T()", bufferType)
+                .beginControlFlow("for (var value : values)")
+                .addStatement("pending.add($L)", isNullable(elementType) ? value : requireNonNull(value, "value"))
+                .endControlFlow();
 
         var implClass = getCollectionImplClass(component).orElseThrow();
         builder.addStatement("if (this._$L == null) this._$L = new $T<>()", fieldName, fieldName, implClass);
