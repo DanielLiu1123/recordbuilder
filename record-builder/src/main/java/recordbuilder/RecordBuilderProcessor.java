@@ -23,6 +23,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.FilerException;
@@ -183,7 +185,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         builderClassBuilder.addMethod(generateBuilderFromSourceMethod(recordElement, builderTypeName));
 
         // Add merge() method
-        builderClassBuilder.addMethod(generateMergeMethod(recordTypeName, builderTypeName, components));
+        builderClassBuilder.addMethod(generateMergeMethod(recordTypeName, builderTypeName, components, presenceMask));
 
         // Add setter methods for all fields
         // For Collection types, generate addXxx and addAllXxx methods
@@ -663,7 +665,10 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
     }
 
     private MethodSpec generateMergeMethod(
-            TypeName recordTypeName, TypeName builderTypeName, List<? extends RecordComponentElement> components) {
+            TypeName recordTypeName,
+            TypeName builderTypeName,
+            List<? extends RecordComponentElement> components,
+            PresenceMask presenceMask) {
         var names = new NameAllocator();
         for (RecordComponentElement component : components) {
             names.newName(component.getSimpleName().toString());
@@ -675,7 +680,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addParameter(recordTypeName, sourceName)
                 .addStatement("$T.requireNonNull($L, $S)", Objects.class, sourceName, "other cannot be null");
 
-        for (RecordComponentElement component : components) {
+        for (int i = 0; i < components.size(); i++) {
+            var component = components.get(i);
             String fieldName = component.getSimpleName().toString();
             String suffix = capitalize(fieldName);
             if (isPrimitive(component)) {
@@ -685,23 +691,70 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
 
             String methodPrefix = "set";
             CodeBlock localType = CodeBlock.of("var");
+            Class<?> implementation = null;
             if (isCollection(component)) {
                 methodPrefix = "addAll";
+                implementation = getCollectionImplClass(component).orElseThrow();
                 // Match the bulk parameter type so a more specific single-element adder cannot win.
                 localType = CodeBlock.of("$T", getParameterTypeForCollection((DeclaredType) component.asType()));
             } else if (isMap(component)) {
                 methodPrefix = "putAll";
+                implementation = getMapImplClass(component).orElseThrow();
             }
+            boolean sortedSet = implementation == TreeSet.class;
+            boolean sorted = sortedSet || implementation == TreeMap.class;
             methodBuilder
-                    .addStatement("$L $L = $L.$L()", localType, fieldName, sourceName, fieldName)
-                    .beginControlFlow("if ($L != null)", fieldName)
-                    .addStatement("this.$L$L($L)", methodPrefix, suffix, fieldName)
-                    .endControlFlow();
+                    .addStatement(
+                            "$L $L = $L.$L()",
+                            sorted ? CodeBlock.of("var") : localType,
+                            fieldName,
+                            sourceName,
+                            fieldName)
+                    .beginControlFlow("if ($L != null)", fieldName);
+            if (sorted) {
+                methodBuilder.beginControlFlow("if (this._$L == null)", fieldName);
+                addSortedCopy(methodBuilder, component, implementation, names);
+                methodBuilder.addStatement(presenceMask.setBit(i)).nextControlFlow("else");
+            }
+            CodeBlock argument =
+                    sortedSet ? CodeBlock.of("($L) $L", localType, fieldName) : CodeBlock.of("$L", fieldName);
+            methodBuilder.addStatement("this.$L$L($L)", methodPrefix, suffix, argument);
+            if (sorted) {
+                methodBuilder.endControlFlow();
+            }
+            methodBuilder.endControlFlow();
         }
 
         methodBuilder.addStatement("return this");
 
         return methodBuilder.build();
+    }
+
+    private void addSortedCopy(
+            MethodSpec.Builder method, RecordComponentElement component, Class<?> implementation, NameAllocator names) {
+        var declaredType = (DeclaredType) component.asType();
+        var fieldName = component.getSimpleName();
+        String copyName = names.newName(fieldName + "Copy");
+        // The sorted-source constructor keeps the comparator, including for empty containers.
+        method.addStatement(
+                "$T $L = new $T<>($L)", getTypeNameWithAnnotations(declaredType), copyName, implementation, fieldName);
+        boolean sortedSet = implementation == TreeSet.class;
+        if (!isNullable(getTypeArgument(declaredType, 0))) {
+            var elements = sortedSet ? CodeBlock.of("$L", copyName) : CodeBlock.of("$L.keySet()", copyName);
+            addNullCheckLoop(method, elements, names.newName("item"), sortedSet ? "value" : "key");
+        }
+        if (!sortedSet && !isNullable(getTypeArgument(declaredType, 1))) {
+            addNullCheckLoop(method, CodeBlock.of("$L.values()", copyName), names.newName("item"), "value");
+        }
+        method.addStatement("this._$L = $L", fieldName, copyName);
+    }
+
+    private static void addNullCheckLoop(MethodSpec.Builder method, CodeBlock elements, String itemName, String label) {
+        method.beginControlFlow("for (var $L : $L)", itemName, elements)
+                .beginControlFlow("if ($L == null)", itemName)
+                .addStatement("throw new $T($S)", NullPointerException.class, label + " cannot be null")
+                .endControlFlow()
+                .endControlFlow();
     }
 
     private String capitalize(String str) {
@@ -910,6 +963,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 Map.entry("java.util.LinkedList", "java.util.LinkedList"),
                 Map.entry("java.util.HashSet", "java.util.HashSet"),
                 Map.entry("java.util.SortedSet", "java.util.TreeSet"),
+                Map.entry("java.util.NavigableSet", "java.util.TreeSet"),
                 Map.entry("java.util.TreeSet", "java.util.TreeSet"),
                 Map.entry("java.util.concurrent.CopyOnWriteArrayList", "java.util.concurrent.CopyOnWriteArrayList"));
     }

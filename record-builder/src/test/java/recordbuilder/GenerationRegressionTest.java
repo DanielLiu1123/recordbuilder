@@ -274,7 +274,12 @@ class GenerationRegressionTest {
                 "java.util.List<? super Integer>",
                 "java.util.Map<? extends Number, ? super Integer>",
                 "java.util.List",
-                "java.util.Map"
+                "java.util.Map",
+                "java.util.SortedSet<? extends Number>",
+                "java.util.NavigableSet<? super Integer>",
+                "java.util.SortedMap<? extends Number, ? super Integer>",
+                "java.util.SortedSet",
+                "java.util.SortedMap"
             })
     void wildcardAndRawTypesCompile(String type) {
         CompilationSubject.assertThat(compile("Sample", """
