@@ -739,18 +739,17 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         var declaredType = (DeclaredType) component.asType();
         var fieldName = component.getSimpleName();
         String copyName = names.newName(fieldName + "Copy");
-        // Copy by iteration so weakly consistent sources can change size during the copy.
-        boolean wildcard =
-                declaredType.getTypeArguments().stream().anyMatch(type -> type.getKind() == TypeKind.WILDCARD);
+        var arguments = declaredType.getTypeArguments();
+        var copyType = ClassName.get(implementation);
         // A raw temporary lets the copy accept elements captured by a wildcard source.
-        var copyType = wildcard ? ClassName.get(implementation) : getTypeNameWithAnnotations(declaredType);
-        method.addStatement(
-                "$T $L = new $T$L($L.comparator())",
-                copyType,
-                copyName,
-                implementation,
-                wildcard ? "" : "<>",
-                fieldName);
+        TypeName constructorType = arguments.isEmpty()
+                        || arguments.stream().anyMatch(type -> type.getKind() == TypeKind.WILDCARD)
+                ? copyType
+                : ParameterizedTypeName.get(
+                        copyType,
+                        arguments.stream().map(this::getTypeNameWithAnnotations).toArray(TypeName[]::new));
+        // Copy by iteration so weakly consistent sources can change size during the copy.
+        method.addStatement("var $L = new $T($L.comparator())", copyName, constructorType, fieldName);
         var keyOrElement = getTypeArgument(declaredType, 0);
         if (implementation == TreeSet.class) {
             String item = names.newName("item");
