@@ -276,7 +276,7 @@ class GenerationRegressionTest {
                 "java.util.List",
                 "java.util.Map",
                 "java.util.SortedSet<? extends Number>",
-                "java.util.NavigableSet<? super Integer>",
+                "java.util.TreeSet<? super Integer>",
                 "java.util.SortedMap<? extends Number, ? super Integer>",
                 "java.util.SortedSet",
                 "java.util.SortedMap"
@@ -287,6 +287,19 @@ class GenerationRegressionTest {
                 @recordbuilder.RecordBuilder
                 public record Sample(%s values) {}
                 """.formatted(type))).succeeded();
+    }
+
+    @Test
+    void navigableSetComponentKeepsItsSetter() {
+        CompilationSubject.assertThat(compile("Sample", """
+                package test;
+                @recordbuilder.RecordBuilder
+                public record Sample(java.util.NavigableSet<Integer> values) {
+                    static Sample create() {
+                        return SampleBuilder.builder().setValues(new java.util.TreeSet<>()).build();
+                    }
+                }
+                """)).succeeded();
     }
 
     @Test

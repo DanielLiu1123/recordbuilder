@@ -701,8 +701,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 methodPrefix = "putAll";
                 implementation = getMapImplClass(component).orElseThrow();
             }
-            boolean sortedSet = implementation == TreeSet.class;
-            boolean sorted = sortedSet || implementation == TreeMap.class;
+            boolean sorted = implementation == TreeSet.class || implementation == TreeMap.class;
             methodBuilder
                     .addStatement(
                             "$L $L = $L.$L()",
@@ -711,16 +710,21 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                             sourceName,
                             fieldName)
                     .beginControlFlow("if ($L != null)", fieldName);
+            // Keep the sorted source type for the copy and the bulk parameter type for overload resolution.
+            CodeBlock argument = implementation == TreeSet.class
+                    ? CodeBlock.of("($L) $L", localType, fieldName)
+                    : CodeBlock.of("$L", fieldName);
+            var mergeCall = CodeBlock.of("this.$L$L($L)", methodPrefix, suffix, argument);
             if (sorted) {
                 methodBuilder.beginControlFlow("if (this._$L == null)", fieldName);
                 addSortedCopy(methodBuilder, component, implementation, names);
-                methodBuilder.addStatement(presenceMask.setBit(i)).nextControlFlow("else");
-            }
-            CodeBlock argument =
-                    sortedSet ? CodeBlock.of("($L) $L", localType, fieldName) : CodeBlock.of("$L", fieldName);
-            methodBuilder.addStatement("this.$L$L($L)", methodPrefix, suffix, argument);
-            if (sorted) {
-                methodBuilder.endControlFlow();
+                methodBuilder
+                        .addStatement(presenceMask.setBit(i))
+                        .nextControlFlow("else")
+                        .addStatement("$L", mergeCall)
+                        .endControlFlow();
+            } else {
+                methodBuilder.addStatement("$L", mergeCall);
             }
             methodBuilder.endControlFlow();
         }
@@ -963,7 +967,6 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 Map.entry("java.util.LinkedList", "java.util.LinkedList"),
                 Map.entry("java.util.HashSet", "java.util.HashSet"),
                 Map.entry("java.util.SortedSet", "java.util.TreeSet"),
-                Map.entry("java.util.NavigableSet", "java.util.TreeSet"),
                 Map.entry("java.util.TreeSet", "java.util.TreeSet"),
                 Map.entry("java.util.concurrent.CopyOnWriteArrayList", "java.util.concurrent.CopyOnWriteArrayList"));
     }

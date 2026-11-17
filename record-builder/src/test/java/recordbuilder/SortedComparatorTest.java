@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Comparator;
-import java.util.NavigableSet;
 import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TreeMap;
@@ -18,7 +17,7 @@ class SortedComparatorTest {
     record Leaderboard(SortedSet<Score> scores, SortedMap<Score, String> labels) {}
 
     @RecordBuilder
-    record EmptySorted(NavigableSet<Integer> scores, TreeMap<Integer, String> labels) {}
+    record EmptySorted(TreeSet<Integer> scores, TreeMap<Integer, String> labels) {}
 
     @Test
     void prototypeCopyKeepsComparatorsForNonComparableElementsAndKeys() {
