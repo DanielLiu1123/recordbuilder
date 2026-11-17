@@ -352,7 +352,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         var value = CodeBlock.of("value");
         builder.addStatement("var pending = new $T()", bufferType)
                 .beginControlFlow("for (var value : values)")
-                .addStatement("pending.add($L)", isNullable(elementType) ? value : requireNonNull(value, "value"))
+                .addStatement("pending.add($L)", checkedArgument(value, elementType, "value"))
                 .endControlFlow();
 
         var implClass = getCollectionImplClass(component).orElseThrow();
@@ -456,8 +456,8 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addStatement(
                         "pending.add(new $T<>($L, $L))",
                         AbstractMap.SimpleImmutableEntry.class,
-                        isNullable(keyType) ? key : requireNonNull(key, "key"),
-                        isNullable(valueType) ? value : requireNonNull(value, "value"))
+                        checkedArgument(key, keyType, "key"),
+                        checkedArgument(value, valueType, "value"))
                 .endControlFlow();
 
         var implClass = getMapImplClass(component).orElseThrow();
@@ -650,11 +650,10 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             return field;
         }
         var copyClass = implementation.orElseThrow();
-        var arguments = ((DeclaredType) component.asType()).getTypeArguments();
+        var declaredType = (DeclaredType) component.asType();
         // Use var only when the inferred type matches the component type for constructor overload resolution.
-        boolean useVar = getTypeFQN(component).equals(copyClass.getCanonicalName())
-                && !arguments.isEmpty()
-                && arguments.stream().noneMatch(type -> type.getKind() == TypeKind.WILDCARD);
+        boolean useVar =
+                getTypeFQN(component).equals(copyClass.getCanonicalName()) && hasConcreteTypeArguments(declaredType);
         var localType =
                 useVar ? CodeBlock.of("var") : CodeBlock.of("$T", getTypeNameWithAnnotations(component.asType()));
         method.addStatement("$L $L = $L == null ? null : new $T<>($L)", localType, name, field, copyClass, field);
@@ -747,12 +746,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         var arguments = declaredType.getTypeArguments();
         var copyType = ClassName.get(implementation);
         // A raw temporary lets the copy accept elements captured by a wildcard source.
-        TypeName constructorType = arguments.isEmpty()
-                        || arguments.stream().anyMatch(type -> type.getKind() == TypeKind.WILDCARD)
-                ? copyType
-                : ParameterizedTypeName.get(
+        TypeName constructorType = hasConcreteTypeArguments(declaredType)
+                ? ParameterizedTypeName.get(
                         copyType,
-                        arguments.stream().map(this::getTypeNameWithAnnotations).toArray(TypeName[]::new));
+                        arguments.stream().map(this::getTypeNameWithAnnotations).toArray(TypeName[]::new))
+                : copyType;
         // Copy by iteration so weakly consistent sources can change size during the copy.
         method.addStatement("var $L = new $T($L.comparator())", copyName, constructorType, sourceName);
         var keyOrElement = getTypeArgument(declaredType, 0);
@@ -760,8 +758,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
             String item = names.newName("item");
             var value = CodeBlock.of("$L", item);
             method.beginControlFlow("for (var $L : $L)", item, sourceName)
-                    .addStatement(
-                            "$L.add($L)", copyName, isNullable(keyOrElement) ? value : requireNonNull(value, "value"))
+                    .addStatement("$L.add($L)", copyName, checkedArgument(value, keyOrElement, "value"))
                     .endControlFlow();
         } else {
             addSortedMapEntries(method, declaredType, copyName, sourceName, names);
@@ -784,9 +781,19 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addStatement(
                         "$L.put($L, $L)",
                         copyName,
-                        isNullable(keyType) ? key : requireNonNull(key, "key"),
-                        isNullable(valueType) ? value : requireNonNull(value, "value"))
+                        checkedArgument(key, keyType, "key"),
+                        checkedArgument(value, valueType, "value"))
                 .endControlFlow();
+    }
+
+    private static boolean hasConcreteTypeArguments(DeclaredType type) {
+        var arguments = type.getTypeArguments();
+        return !arguments.isEmpty()
+                && arguments.stream().noneMatch(argument -> argument.getKind() == TypeKind.WILDCARD);
+    }
+
+    private static CodeBlock checkedArgument(CodeBlock value, TypeName type, String label) {
+        return isNullable(type) ? value : requireNonNull(value, label);
     }
 
     private static CodeBlock requireNonNull(CodeBlock value, String label) {
