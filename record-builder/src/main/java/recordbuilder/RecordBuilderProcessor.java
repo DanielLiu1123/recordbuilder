@@ -742,22 +742,44 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         // The sorted-source constructor keeps the comparator, including for empty containers.
         method.addStatement(
                 "$T $L = new $T<>($L)", getTypeNameWithAnnotations(declaredType), copyName, implementation, fieldName);
-        boolean sortedSet = implementation == TreeSet.class;
-        if (!isNullable(getTypeArgument(declaredType, 0))) {
-            var elements = sortedSet ? CodeBlock.of("$L", copyName) : CodeBlock.of("$L.keySet()", copyName);
-            addNullCheckLoop(method, elements, names.newName("item"), sortedSet ? "value" : "key");
-        }
-        if (!sortedSet && !isNullable(getTypeArgument(declaredType, 1))) {
-            addNullCheckLoop(method, CodeBlock.of("$L.values()", copyName), names.newName("item"), "value");
+        if (implementation == TreeSet.class) {
+            if (!isNullable(getTypeArgument(declaredType, 0))) {
+                String item = names.newName("item");
+                method.beginControlFlow("for (var $L : $L)", item, copyName);
+                addNullCheck(method, CodeBlock.of("$L", item), "value");
+                method.endControlFlow();
+            }
+        } else {
+            addSortedMapNullChecks(method, declaredType, copyName, names);
         }
         method.addStatement("this._$L = $L", fieldName, copyName);
     }
 
-    private static void addNullCheckLoop(MethodSpec.Builder method, CodeBlock elements, String itemName, String label) {
-        method.beginControlFlow("for (var $L : $L)", itemName, elements)
-                .beginControlFlow("if ($L == null)", itemName)
+    private void addSortedMapNullChecks(
+            MethodSpec.Builder method, DeclaredType type, String copyName, NameAllocator names) {
+        boolean checkKey = !isNullable(getTypeArgument(type, 0));
+        boolean checkValue = !isNullable(getTypeArgument(type, 1));
+        if (!checkKey && !checkValue) {
+            return;
+        }
+        // Give raw maps a wildcard view so entrySet() still yields Map.Entry.
+        var map = type.getTypeArguments().isEmpty()
+                ? CodeBlock.of("(($T<?, ?>) $L)", Map.class, copyName)
+                : CodeBlock.of("$L", copyName);
+        String entry = names.newName("entry");
+        method.beginControlFlow("for (var $L : $L.entrySet())", entry, map);
+        if (checkKey) {
+            addNullCheck(method, CodeBlock.of("$L.getKey()", entry), "key");
+        }
+        if (checkValue) {
+            addNullCheck(method, CodeBlock.of("$L.getValue()", entry), "value");
+        }
+        method.endControlFlow();
+    }
+
+    private static void addNullCheck(MethodSpec.Builder method, CodeBlock value, String label) {
+        method.beginControlFlow("if ($L == null)", value)
                 .addStatement("throw new $T($S)", NullPointerException.class, label + " cannot be null")
-                .endControlFlow()
                 .endControlFlow();
     }
 

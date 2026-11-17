@@ -70,11 +70,12 @@ class SortedComparatorTest {
 
     @Test
     void copyingStillRejectsInvalidNullElementsAndValues() {
-        Comparator<Score> order = Comparator.nullsFirst(Comparator.comparingInt(Score::points));
+        Comparator<Score> order = Comparator.nullsLast(Comparator.comparingInt(Score::points));
         var scores = new TreeSet<>(order);
         scores.add(null);
         var labels = new TreeMap<Score, String>(order);
         labels.put(new Score(1), null);
+        labels.put(null, "later entry");
         var builder = SortedComparatorTest_LeaderboardBuilder.builder();
 
         assertThatThrownBy(() -> builder.merge(new Leaderboard(scores, null)))
@@ -86,6 +87,13 @@ class SortedComparatorTest {
         assertThat(builder.hasScores()).isFalse();
         assertThat(builder.hasLabels()).isFalse();
         assertThat(builder.getScores()).isNull();
+        assertThat(builder.getLabels()).isNull();
+
+        labels.remove(new Score(1));
+        assertThatThrownBy(() -> builder.merge(new Leaderboard(null, labels)))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("key cannot be null");
+        assertThat(builder.hasLabels()).isFalse();
         assertThat(builder.getLabels()).isNull();
     }
 }
