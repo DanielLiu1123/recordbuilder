@@ -280,7 +280,7 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 .addParameter(fieldType, parameter);
 
         if (checkNull) {
-            addNullCheck(builder, CodeBlock.of("$L", parameter), fieldName);
+            builder.addStatement("$L", requireNonNull(CodeBlock.of("$L", parameter), fieldName));
         }
 
         builder.addStatement("this._$L = $L", fieldName, parameter);
@@ -763,11 +763,11 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
         var keyOrElement = getTypeArgument(declaredType, 0);
         if (implementation == TreeSet.class) {
             String item = names.newName("item");
-            method.beginControlFlow("for (var $L : $L)", item, sourceName);
-            if (!isNullable(keyOrElement)) {
-                addNullCheck(method, CodeBlock.of("$L", item), "value");
-            }
-            method.addStatement("$L.add($L)", copyName, item).endControlFlow();
+            var value = CodeBlock.of("$L", item);
+            method.beginControlFlow("for (var $L : $L)", item, sourceName)
+                    .addStatement(
+                            "$L.add($L)", copyName, isNullable(keyOrElement) ? value : requireNonNull(value, "value"))
+                    .endControlFlow();
         } else {
             addSortedMapEntries(method, declaredType, copyName, sourceName, names);
         }
@@ -783,22 +783,19 @@ public final class RecordBuilderProcessor extends AbstractProcessor {
                 ? CodeBlock.of("(($T<?, ?>) $L)", Map.class, sourceName)
                 : CodeBlock.of("$L", sourceName);
         String entry = names.newName("entry");
-        String key = names.newName("key");
-        String value = names.newName("value");
+        var key = CodeBlock.of("$L.getKey()", entry);
+        var value = CodeBlock.of("$L.getValue()", entry);
         method.beginControlFlow("for (var $L : $L.entrySet())", entry, source)
-                .addStatement("var $L = $L.getKey()", key, entry);
-        if (!isNullable(keyType)) {
-            addNullCheck(method, CodeBlock.of("$L", key), "key");
-        }
-        method.addStatement("var $L = $L.getValue()", value, entry);
-        if (!isNullable(valueType)) {
-            addNullCheck(method, CodeBlock.of("$L", value), "value");
-        }
-        method.addStatement("$L.put($L, $L)", copyName, key, value).endControlFlow();
+                .addStatement(
+                        "$L.put($L, $L)",
+                        copyName,
+                        isNullable(keyType) ? key : requireNonNull(key, "key"),
+                        isNullable(valueType) ? value : requireNonNull(value, "value"))
+                .endControlFlow();
     }
 
-    private static void addNullCheck(MethodSpec.Builder method, CodeBlock value, String label) {
-        method.addStatement("$T.requireNonNull($L, $S)", Objects.class, value, label + " cannot be null");
+    private static CodeBlock requireNonNull(CodeBlock value, String label) {
+        return CodeBlock.of("$T.requireNonNull($L, $S)", Objects.class, value, label + " cannot be null");
     }
 
     private String capitalize(String str) {
